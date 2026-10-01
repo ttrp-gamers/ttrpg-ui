@@ -34,7 +34,7 @@ src/
 │   ├── AppLayout.jsx           # Main Shell: Navbar + Sidebar + <Outlet />
 │   └── AuthLayout.jsx          # Auth Shell: Clean centered frame (no Navbar)
 │
-├── features/                   # FEATURE-SPECIFIC COMPONENTS & VIEWS
+├── pages/                   # FEATURE-SPECIFIC COMPONENTS & VIEWS
 │   ├── auth/
 │   │   ├── LoginPage.jsx       # Route target: /
 │   │   └── LoginForm.jsx       # Internal form UI for Login

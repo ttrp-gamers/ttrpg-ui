@@ -5,7 +5,7 @@ export default function AppLayout() {
   return (
     <>
       <Navbar/>
-      <div className="container mt-4">
+      <div>
         <Outlet />
       </div>
     </>
