@@ -1,7 +1,16 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../pages/auth/AuthContext";
 import dragonLogo from "../../assets/dragon.png";
 
 export default function Navbar() {
+  const { logout, user } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();          
+    navigate("/");     
+  };
+
   return (
     <>
       <nav className="navbar navbar-expand navbar-dark bg-dark px-3">
@@ -17,6 +26,9 @@ export default function Navbar() {
           </Link>
           <Link className="nav-link" to="/map">
             maps
+          </Link>
+          <Link className="nav-link" to="/mapDragDrop">
+            mapDropDrop
           </Link>
           <Link className="nav-link" to="/profile">
             profile
@@ -34,6 +46,13 @@ export default function Navbar() {
             height="50"
             style={{ objectFit: "cover" }}
           />
+          <button 
+          className="btn btn-outline-danger btn-sm" 
+          type="button" 
+          onClick={handleLogout}
+        >
+          Logout
+        </button>
         </div>
       </nav>
     </>
