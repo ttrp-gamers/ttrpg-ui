@@ -1,8 +1,45 @@
 import React, { useState, useRef } from 'react';
-import { Stage, Layer } from 'react-konva';
+import { Stage, Layer, Line } from 'react-konva';
+import useImage from 'use-image';
 import './Map.css';
 import MapBackground from './components/MapBackground';
-import BrushTexture from './components/BrushTexture';
+
+// Render individual line using pattern texture or eraser
+function RenderedLine({ line }) {
+  const [patternImage] = useImage(line.textureSrc || '');
+  const isEraser = line.tool === 'eraser';
+
+  if (isEraser) {
+    return (
+      <Line
+        points={line.points}
+        stroke="#000"
+        strokeWidth={line.size}
+        tension={0.5}
+        lineCap="round"
+        lineJoin="round"
+        globalCompositeOperation="destination-out"
+      />
+    );
+  }
+
+  if (patternImage) {
+    return (
+      <Line
+        points={line.points}
+        strokeWidth={line.size}
+        tension={0.5}
+        lineCap="round"
+        lineJoin="round"
+        fillPatternImage={patternImage}
+        fillPatternRepeat="repeat"
+        globalCompositeOperation="source-over"
+      />
+    );
+  }
+
+  return null;
+}
 
 export default function Map() {
   const mapWidth = 800;
@@ -16,8 +53,8 @@ export default function Map() {
 
   // --- DRAWING STATE ---
   const [tool, setTool] = useState('pen'); // 'pen' | 'eraser'
-  const [brushColor, setBrushColor] = useState('#df4b26');
-  const [brushSize, setBrushSize] = useState(5);
+  const [textureSrc, setTextureSrc] = useState(null);
+  const [brushSize, setBrushSize] = useState(15);
   const [lines, setLines] = useState([]);
   const isDrawing = useRef(false);
 
@@ -25,25 +62,33 @@ export default function Map() {
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const objectUrl = URL.createObjectURL(file);
-      setMapImageSrc(objectUrl);
+      setMapImageSrc(URL.createObjectURL(file));
     }
   };
 
-  const handlePickedFrameColor = (e) => {
-    setFrameColor(e.target.value);
+  const handleTextureUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setTextureSrc(URL.createObjectURL(file));
+    }
   };
 
   // --- DRAWING HANDLERS ---
   const handleMouseDown = (e) => {
+    // Prevent drawing if no texture is loaded when using the pen tool
+    if (tool === 'pen' && !textureSrc) {
+      alert('Please upload a brush texture image first!');
+      return;
+    }
+
     isDrawing.current = true;
     const pos = e.target.getStage().getPointerPosition();
-    
-    setLines([
-      ...lines,
+
+    setLines((prev) => [
+      ...prev,
       {
         tool,
-        color: brushColor,
+        textureSrc,
         size: brushSize,
         points: [pos.x, pos.y],
       },
@@ -68,13 +113,9 @@ export default function Map() {
     isDrawing.current = false;
   };
 
-  const handleClearDrawing = () => {
-    setLines([]);
-  };
-
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh' }}>
-      {/* 1. COMPLETE HTML CONTROL TOOLBAR */}
+      {/* TOOLBAR */}
       <div
         className="d-flex gap-3 p-3 align-items-center flex-wrap"
         style={{
@@ -87,7 +128,6 @@ export default function Map() {
           boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
         }}
       >
-        {/* --- BACKGROUND INPUTS --- */}
         <div>
           <label className="form-label me-1 mb-0">Map Image:</label>
           <input
@@ -104,13 +144,13 @@ export default function Map() {
             type="color"
             className="form-control form-control-color form-control-sm d-inline-block"
             value={frameColor}
-            onChange={handlePickedFrameColor}
+            onChange={(e) => setFrameColor(e.target.value)}
           />
         </div>
 
         <span style={{ borderLeft: '1px solid #ccc', height: '24px' }}></span>
 
-        {/* --- BRUSH INPUTS --- */}
+        {/* TOOL SELECTION */}
         <div>
           <label className="form-label me-1 mb-0">Tool:</label>
           <select
@@ -118,19 +158,20 @@ export default function Map() {
             value={tool}
             onChange={(e) => setTool(e.target.value)}
           >
-            <option value="pen">Pen</option>
+            <option value="pen">Texture Brush</option>
             <option value="eraser">Eraser</option>
           </select>
         </div>
 
+        {/* TEXTURE FILE INPUT */}
         {tool === 'pen' && (
           <div>
-            <label className="form-label me-1 mb-0">Brush Color:</label>
+            <label className="form-label me-1 mb-0">Brush Texture:</label>
             <input
-              type="color"
-              className="form-control form-control-color form-control-sm d-inline-block"
-              value={brushColor}
-              onChange={(e) => setBrushColor(e.target.value)}
+              className="form-control form-control-sm d-inline-block w-auto"
+              type="file"
+              accept="image/*"
+              onChange={handleTextureUpload}
             />
           </div>
         )}
@@ -140,18 +181,21 @@ export default function Map() {
           <input
             type="range"
             min="1"
-            max="30"
+            max="50"
             value={brushSize}
             onChange={(e) => setBrushSize(Number(e.target.value))}
           />
         </div>
 
-        <button className="btn btn-sm btn-outline-danger" onClick={handleClearDrawing}>
+        <button
+          className="btn btn-sm btn-outline-danger"
+          onClick={() => setLines([])}
+        >
           Clear Drawing
         </button>
       </div>
 
-      {/* 2. KONVA STAGE */}
+      {/* KONVA STAGE */}
       <Stage
         width={window.innerWidth}
         height={window.innerHeight}
@@ -162,7 +206,6 @@ export default function Map() {
         onTouchMove={handleMouseMove}
         onTouchEnd={handleMouseUp}
       >
-        {/* LAYER 1: Background Image or Frame Color */}
         <Layer>
           <MapBackground
             frameX={frameX}
@@ -174,9 +217,10 @@ export default function Map() {
           />
         </Layer>
 
-        {/* LAYER 2: Drawing Layer */}
         <Layer>
-          <BrushTexture lines={lines} />
+          {lines.map((line, index) => (
+            <RenderedLine key={index} line={line} />
+          ))}
         </Layer>
       </Stage>
     </div>

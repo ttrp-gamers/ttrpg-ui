@@ -20,8 +20,9 @@ export default function MapDragDrop() {
     linesA.push(
       <Line
         key={`v-${i}`}
-        strokeWidth={2}
+        strokeWidth={1}
         stroke={"black"}
+        opacity={0.4}
         points={[x, frameY, x, frameY + mapHeight]}
       />,
     );
@@ -33,7 +34,7 @@ export default function MapDragDrop() {
         key={`h-${i}`}
         strokeWidth={1}
         stroke={"black"}
-        opacity={0.6}
+        opacity={0.4}
         points={[frameX, y, frameX + mapWidth, y]}
       />,
     );
@@ -62,17 +63,20 @@ export default function MapDragDrop() {
               const itemWidth = 100;
               const itemHeight = 100;
 
-              // 1. Find the center point relative to the frame
+              // 1. Center point relative to frame
               const centerX = e.target.x() - frameX + itemWidth / 2;
               const centerY = e.target.y() - frameY + itemHeight / 2;
 
-              // 2. Snap the center point to the nearest grid cell center
-              const snappedCenterX =
-                Math.floor(centerX / grid) * grid + grid / 2;
-              const snappedCenterY =
-                Math.floor(centerY / grid) * grid + grid / 2;
+              // 2. DISCRETE GRID CELL COORDINATES (Integer Column & Row for DB)
+              const gridX = Math.floor(centerX / grid); // e.g., 4
+              const gridY = Math.floor(centerY / grid); // e.g., 7
+              console.log("Grid Cell:", gridX, gridY);
 
-              // 3. Convert back to top-left coordinate for Konva
+              // 3. Pixel position for snapped center
+              const snappedCenterX = gridX * grid + grid / 2;
+              const snappedCenterY = gridY * grid + grid / 2;
+
+              // 4. Animate to top-left coordinate for Konva
               e.target.to({
                 x: frameX + snappedCenterX - itemWidth / 2,
                 y: frameY + snappedCenterY - itemHeight / 2,
