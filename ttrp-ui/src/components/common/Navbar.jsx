@@ -7,8 +7,8 @@ export default function Navbar() {
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout();          
-    navigate("/");     
+    logout();
+    navigate("/");
   };
 
   return (
