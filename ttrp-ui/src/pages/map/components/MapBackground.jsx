@@ -1,13 +1,9 @@
-import { Rect } from "react-konva";
-import { Image } from 'react-konva';
-import useImage from 'use-image';
+import React from "react";
+import { Rect, Image } from "react-konva";
+import useImage from "use-image";
 
-const URLImage = ({ src, width, height, ...rest }) => {
-  const [image] = useImage(src, 'anonymous');
-
-  // Calculate coordinates to center the image on screen
-  const x = (window.innerWidth - width) / 2;
-  const y = (window.innerHeight - height) / 2;
+const URLImage = ({ src, x, y, width, height, ...rest }) => {
+  const [image] = useImage(src, "anonymous");
 
   return (
     <Image
@@ -26,12 +22,12 @@ export default function MapBackground({
   frameY,
   mapWidth,
   mapHeight,
-  frameColor,
+  frameColor = "#f0f0f0",
   mapImageSrc,
 }) {
   return (
     <>
-      {/* Base Colored Canvas Frame */}
+      {/* Base Canvas Frame */}
       <Rect
         x={frameX}
         y={frameY}
@@ -42,7 +38,7 @@ export default function MapBackground({
         strokeWidth={2}
       />
 
-      {/* Render Image Overlay only if an image source exists */}
+      {/* Render Image Overlay using explicit frame coordinates */}
       {mapImageSrc && (
         <URLImage
           src={mapImageSrc}
