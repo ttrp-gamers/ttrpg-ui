@@ -1,14 +1,4 @@
    .auth-page {
-       --wood-dark: #24130d;
-       --wood: #422719;
-       --wood-light: #704426;
-       --wood-highlight: #98643b;
-       --gold: #f6c66b;
-       --gold-light: #ffe4a3;
-       --orange: #e58b32;
-       --text: #fff0d5;
-       --muted: #d0b995;
-
        min-height: 100vh;
        box-sizing: border-box;
 
