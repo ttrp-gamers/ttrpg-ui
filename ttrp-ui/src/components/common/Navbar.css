@@ -1,0 +1,10 @@
+.ttrp-nav {
+  background-color: var(--wood-light);
+  a,
+  .navbar-brand,
+  .nav-link {
+    color: var(
+      --gold-light
+    ) !important; 
+  }
+}

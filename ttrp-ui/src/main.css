@@ -1,1 +1,38 @@
 @import "tailwindcss";
+
+:root {
+       --wood-dark: #24130d;
+       --wood: #422719;
+       --wood-light: #704426;
+       --wood-highlight: #98643b;
+       --gold: #f6c66b;
+       --gold-light: #ffe4a3;
+       --orange: #e58b32;
+       --text: #fff0d5;
+       --muted: #d0b995;
+}
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  
+  /* 1. Prevent background tiling */
+  background-repeat: no-repeat;
+  
+  /* 2. Stretch gradient to fill screen height or fix it to viewport */
+  background-attachment: fixed;
+  
+  /* 3. Your dual gradient styling */
+  background:
+    radial-gradient(
+      ellipse at top,
+      rgba(112, 68, 38, 0.35),
+      transparent 60%
+    ),
+    linear-gradient(
+      135deg,
+      #130b07,
+      #28170f 45%,
+      #170d08
+    );
+}

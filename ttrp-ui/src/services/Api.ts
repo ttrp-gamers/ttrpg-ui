@@ -12,7 +12,7 @@ export const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
-    
+
     // Strictly check that token exists and is valid string before adding header
     if (token && token !== 'null' && token !== 'undefined' && token.trim() !== '') {
       config.headers.Authorization = `Bearer ${token}`;
@@ -20,7 +20,7 @@ api.interceptors.request.use(
       // Ensure no Authorization header is sent for unauthenticated calls (register/login)
       delete config.headers.Authorization;
     }
-    
+
     return config;
   },
   (error) => Promise.reject(error)
@@ -31,8 +31,8 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true; 
+
+      if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/')) {
 
       try {
         const refreshToken = localStorage.getItem('refreshToken');
@@ -67,3 +67,29 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export interface ProfileResponse {
+    id: number;
+    username: string;
+    email: string;
+    avatarUrl: string | null;
+    bio: string | null;
+}
+
+export interface UpdateProfileBody {
+    username?: string;
+    avatarUrl?: string;
+    bio?: string;
+    currentPassword?: string;
+    newPassword?: string;
+}
+
+export const getProfile = () =>
+    api.get<ProfileResponse>('/v1/user/profile').then((res) => res.data);
+
+export const updateProfile = (body: UpdateProfileBody) =>
+    api.put<ProfileResponse>('/v1/user/profile', body).then((res) => res.data);
+
+
+
+
