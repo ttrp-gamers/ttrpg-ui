@@ -1,0 +1,31 @@
+{
+  "id": "call-of-cthulhu-7e",
+  "name": "Call of Cthulhu 7e",
+  "description": "Percentile characteristics with derived Sanity, Magic Points, and Hit Points.",
+  "terminology": { "archetype": "Occupation", "level": "Investigator Experience" },
+  "archetypes": ["Antiquarian", "Detective", "Doctor", "Journalist", "Professor", "Private Investigator", "Soldier", "Custom"],
+  "sections": [
+    {
+      "id": "characteristics",
+      "title": "Characteristics",
+      "fields": [
+        { "id": "strength", "label": "Strength (STR)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "constitution", "label": "Constitution (CON)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "size", "label": "Size (SIZ)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "dexterity", "label": "Dexterity (DEX)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "appearance", "label": "Appearance (APP)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "intelligence", "label": "Intelligence (INT)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "power", "label": "Power (POW)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] },
+        { "id": "education", "label": "Education (EDU)", "model": "percentile", "defaultValue": 50, "min": 1, "max": 99, "checks": ["half", "fifth"] }
+      ]
+    }
+  ],
+  "derivedStats": [
+    { "id": "sanity", "label": "Sanity", "formula": "power", "description": "Starts equal to Power." },
+    { "id": "magicPoints", "label": "Magic Points", "formula": "floor(power / 5)" },
+    { "id": "hitPoints", "label": "Hit Points", "formula": "floor((constitution + size) / 10)" }
+  ],
+  "resources": [
+    { "id": "luck", "label": "Luck", "defaultValue": 50 }
+  ]
+}

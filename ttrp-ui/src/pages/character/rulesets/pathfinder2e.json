@@ -1,0 +1,17 @@
+{
+  "id": "pathfinder2e",
+  "name": "Pathfinder 2e",
+  "description": "Six ability scores with ancestry/class-based character building.",
+  "terminology": { "archetype": "Class", "level": "Level" },
+  "archetypes": ["Alchemist", "Barbarian", "Bard", "Champion", "Cleric", "Druid", "Fighter", "Ranger", "Rogue", "Sorcerer", "Wizard"],
+  "sections": [{ "id": "abilities", "title": "Ability Scores", "fields": [
+    { "id": "strength", "label": "Strength", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((strength - 10) / 2)" },
+    { "id": "dexterity", "label": "Dexterity", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((dexterity - 10) / 2)" },
+    { "id": "constitution", "label": "Constitution", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((constitution - 10) / 2)" },
+    { "id": "intelligence", "label": "Intelligence", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((intelligence - 10) / 2)" },
+    { "id": "wisdom", "label": "Wisdom", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((wisdom - 10) / 2)" },
+    { "id": "charisma", "label": "Charisma", "model": "score", "defaultValue": 10, "min": 1, "max": 30, "modifier": "floor((charisma - 10) / 2)" }
+  ]}],
+  "derivedStats": [{ "id": "hitPoints", "label": "Hit Points", "formula": "level * (8 + floor((constitution - 10) / 2))" }],
+  "resources": []
+}

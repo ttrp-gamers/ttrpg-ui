@@ -1,0 +1,10 @@
+{
+  "id": "custom",
+  "name": "Homebrew (custom ruleset)",
+  "description": "Start with an empty ruleset and define the fields your game needs.",
+  "terminology": { "archetype": "Archetype", "level": "Level" },
+  "archetypes": [],
+  "sections": [],
+  "derivedStats": [],
+  "resources": []
+}
