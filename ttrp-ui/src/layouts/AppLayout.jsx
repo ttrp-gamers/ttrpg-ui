@@ -5,9 +5,8 @@ export default function AppLayout() {
   return (
     <>
       <Navbar/>
-      <div>
         <Outlet />
-      </div>
     </>
   );
 }
+

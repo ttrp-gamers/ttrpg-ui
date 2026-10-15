@@ -2,18 +2,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../pages/auth/AuthContext";
 import dragonLogo from "../../assets/dragon.png";
 
+import "./Navbar.css"
+
 export default function Navbar() {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
-    logout();          
-    navigate("/");     
+    logout();
+    navigate("/");
   };
 
   return (
     <>
-      <nav className="navbar navbar-expand navbar-dark bg-dark px-3">
+      <nav className="navbar navbar-expand px-3 ttrp-nav">
         <Link className="navbar-brand" to="/overview">
           TTRP Vault
         </Link>
