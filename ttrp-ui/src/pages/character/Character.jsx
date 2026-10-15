@@ -453,7 +453,7 @@ export default function Character() {
   };
 
   return (
-    <div className="container py-4">
+    <div className="container py-4 character-page">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
           <h2 className="mb-1">Character Creation & Sheet Manager</h2>
