@@ -6,6 +6,7 @@ import { CharacterService } from "../../services/CharacterService";
 import { useAuth } from "../auth/AuthContext";
 import { AttributeInput } from "./components/CharacterFields";
 import { evaluateDerivedStats } from "./rulesets/formulaEngine";
+import { exportCharacterPdf } from "./pdfExport";
 
 const DEFAULT_HIT_DIE = 8;
 const EMPTY_CUSTOM_RULESET = {
@@ -131,6 +132,24 @@ function hpForCharacter(character, rulesets) {
   return {
     currentHp: character.currentHp ?? maxHp,
     maxHp,
+  };
+}
+
+function exportDataForForm(form, activeRuleset, derivedStats) {
+  const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
+  return {
+    name: form.name || "character-sheet",
+    characterClass: effectiveArchetype,
+    level: Number(form.level) || 1,
+    ruleset: activeRuleset.name,
+    maxHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.maxHp,
+    currentHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.currentHp,
+    attributes: {
+      rulesetKey: form.rulesetKey,
+      values: form.values,
+      resources: form.resources,
+      hitDie: form.hitDie,
+    },
   };
 }
 
@@ -457,6 +476,19 @@ export default function Character() {
     }
   };
 
+  const exportFormPdf = async () => {
+    try {
+      await exportCharacterPdf(
+      exportDataForForm(form, activeRuleset, derivedStats),
+      activeRuleset,
+      derivedStats,
+      );
+    } catch (error) {
+      console.error("Character PDF export failed:", error);
+      setFeedback({ type: "danger", message: "Failed to export the character sheet as PDF." });
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
     if (!form.name.trim()) {
@@ -769,6 +801,14 @@ export default function Character() {
                 />
                 <div className="d-grid">
                   <button
+                    type="button"
+                    className="btn btn-outline-primary mb-2"
+                    onClick={exportFormPdf}
+                    disabled={!activeRuleset}
+                  >
+                    Export Character Sheet PDF
+                  </button>
+                  <button
                     type="submit"
                     className="btn btn-primary btn-lg"
                     disabled={isSubmitting || !user}
@@ -857,6 +897,29 @@ export default function Character() {
                               onClick={() => handleEdit(character)}
                             >
                               Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={async () => {
+                                try {
+                                  await exportCharacterPdf(
+                                    character,
+                                    rulesetForCharacter(character, rulesets),
+                                    character.attributes?.derivedStats || evaluateDerivedStats(
+                                      rulesetForCharacter(character, rulesets),
+                                      character.attributes?.values || {},
+                                      character.level,
+                                      character.attributes?.hitDie,
+                                    ),
+                                  );
+                                } catch (error) {
+                                  console.error("Character PDF export failed:", error);
+                                  setFeedback({ type: "danger", message: "Failed to export the character sheet as PDF." });
+                                }
+                              }}
+                            >
+                              PDF
                             </button>
                             <button
                               type="button"
