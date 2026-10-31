@@ -9,12 +9,16 @@ export default function MapDragDrop() {
   const grid = 40;
   const mapWidth = 1000;
   const mapHeight = 1000;
+  // variables to center the map
+  // how far away from the window the map beginns from right
   const frameX = (window.innerWidth - mapWidth) / 2;
+    // how far away from the window the map beginns from top
   const frameY = (window.innerHeight - mapHeight) / 2;
-
+  
   const linesA = [];
   const linesB = [];
 
+  // vertical lines
   for (let i = 0; i < mapHeight / grid; i++) {
     const x = frameX + i * grid;
     linesA.push(
@@ -23,10 +27,13 @@ export default function MapDragDrop() {
         strokeWidth={1}
         stroke={"black"}
         opacity={0.4}
+        // starts at x, frameY and ends at x, frameY + mapHeight
         points={[x, frameY, x, frameY + mapHeight]}
       />,
     );
   }
+
+  // horizontal lines
   for (let i = 0; i <= mapHeight / grid; i++) {
     const y = frameY + i * grid;
     linesB.push(
@@ -82,8 +89,8 @@ export default function MapDragDrop() {
                 y: frameY + snappedCenterY - itemHeight / 2,
               });
             }}
-            x={80}
-            y={80}
+            x={frameX}
+            y={frameY}
             draggable
             width={100}
             height={100}
