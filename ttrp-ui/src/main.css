@@ -10,6 +10,9 @@
        --orange: #e58b32;
        --text: #fff0d5;
        --muted: #d0b995;
+       --bronze: #b17b43;
+       --wood-deep: #2b170e;
+       --status-online: #7ccf6a;
 }
 html, body {
   margin: 0;
