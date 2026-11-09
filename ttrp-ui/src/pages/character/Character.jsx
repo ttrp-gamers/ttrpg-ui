@@ -1,13 +1,24 @@
 import "./Character.css";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { CharacterService } from "../../services/CharacterService";
 import { useAuth } from "../auth/AuthContext";
-import { evaluateDerivedStats, evaluateFormula } from "./rulesets/formulaEngine";
-import { getAllFields, RULESET_PRESETS } from "./rulesets/index.js";
+import { AttributeInput } from "./components/CharacterFields";
+import { evaluateDerivedStats } from "./rulesets/formulaEngine";
+import { exportCharacterPdf } from "./pdfExport";
 
 const DEFAULT_HIT_DIE = 8;
+const EMPTY_CUSTOM_RULESET = {
+  id: "custom",
+  name: "Homebrew (custom ruleset)",
+  description: "Start with an empty ruleset and define the fields your game needs.",
+  terminology: { archetype: "Archetype", level: "Level" },
+  archetypes: [],
+  sections: [],
+  derivedStats: [],
+  resources: [],
+};
 const DND_HIT_DICE = {
   Barbarian: 12,
   Bard: 8,
@@ -28,37 +39,31 @@ function hitDieFor(rulesetKey, archetype) {
 }
 
 function valuesForRuleset(ruleset, existing = {}) {
-  return Object.fromEntries(getAllFields(ruleset).map((field) => [
+  return Object.fromEntries((ruleset.sections || []).flatMap((section) => section.fields || []).map((field) => [
     field.id,
     existing[field.id] ?? field.defaultValue ?? (field.type === "text" ? "" : 0),
   ]));
 }
 
 function createInitialForm() {
-  const ruleset = RULESET_PRESETS.DND_5E;
   return {
     name: "",
     rulesetKey: "DND_5E",
-    archetype: ruleset.archetypes[4],
+    archetype: "",
     customArchetype: "",
     level: 1,
-    hitDie: hitDieFor("DND_5E", ruleset.archetypes[4]),
-    values: valuesForRuleset(ruleset),
+    hitDie: DEFAULT_HIT_DIE,
+    values: {},
     resources: {},
     autoCalculateHp: true,
     maxHp: 10,
     currentHp: 10,
-    customRuleset: RULESET_PRESETS.CUSTOM,
+    customRuleset: EMPTY_CUSTOM_RULESET,
   };
 }
 
 function displayNumber(value) {
   return value === null || value === undefined ? "—" : value;
-}
-
-function modifierLabel(value) {
-  if (value === null || value === undefined) return "Invalid formula";
-  return `${value >= 0 ? "+" : ""}${value}`;
 }
 
 function rulesetFileName(name) {
@@ -73,7 +78,7 @@ function rulesetFileName(name) {
 function namedFields(ruleset) {
   const seenNames = new Map();
   return new Map(
-    getAllFields(ruleset).map((field) => {
+    (ruleset.sections || []).flatMap((section) => section.fields || []).map((field) => {
       const baseName = String(field.label || field.id || "Attribute").trim() || "Attribute";
       const occurrence = (seenNames.get(baseName) || 0) + 1;
       seenNames.set(baseName, occurrence);
@@ -104,28 +109,47 @@ function formulaForStorage(formula, ruleset) {
   return replaceFormulaNames(formula, ruleset, "storage");
 }
 
-function rulesetForCharacter(character) {
+function rulesetForCharacter(character, rulesets) {
   if (character.attributes?.rulesetKey === "CUSTOM" && character.attributes?.rulesetSchema) {
     return character.attributes.rulesetSchema;
   }
-  const preset = Object.values(RULESET_PRESETS).find((ruleset) => ruleset.name === character.ruleset);
-  return preset || RULESET_PRESETS.CUSTOM;
+  return Object.values(rulesets).find((ruleset) => ruleset.name === character.ruleset)
+    || rulesets.CUSTOM
+    || EMPTY_CUSTOM_RULESET;
 }
 
-function hpForCharacter(character) {
-  const ruleset = rulesetForCharacter(character);
+function hpForCharacter(character, rulesets) {
+  const ruleset = rulesetForCharacter(character, rulesets);
   const attributes = character.attributes || {};
-  const calculatedHp = evaluateDerivedStats(
-    ruleset,
-    attributes.values || {},
-    character.level,
-    attributes.hitDie,
-  ).hitPoints;
+  const calculatedHp = attributes.derivedStats?.hitPoints ?? evaluateDerivedStats(
+      ruleset,
+      attributes.values || {},
+      character.level,
+      attributes.hitDie,
+    ).hitPoints;
   const maxHp = character.maxHp ?? calculatedHp;
 
   return {
     currentHp: character.currentHp ?? maxHp,
     maxHp,
+  };
+}
+
+function exportDataForForm(form, activeRuleset, derivedStats) {
+  const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
+  return {
+    name: form.name || "character-sheet",
+    characterClass: effectiveArchetype,
+    level: Number(form.level) || 1,
+    ruleset: activeRuleset.name,
+    maxHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.maxHp,
+    currentHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.currentHp,
+    attributes: {
+      rulesetKey: form.rulesetKey,
+      values: form.values,
+      resources: form.resources,
+      hitDie: form.hitDie,
+    },
   };
 }
 
@@ -138,14 +162,63 @@ export default function Character() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null);
+  const [rulesets, setRulesets] = useState({});
+  const [isLoadingRulesets, setIsLoadingRulesets] = useState(true);
+  const [rulesetsError, setRulesetsError] = useState(null);
+  const [derivedStats, setDerivedStats] = useState({});
 
-  const activeRuleset = form.rulesetKey === "CUSTOM" ? form.customRuleset : RULESET_PRESETS[form.rulesetKey];
-  const derivedStats = useMemo(
-    () => evaluateDerivedStats(activeRuleset, form.values, form.level, form.hitDie),
-    [activeRuleset, form.values, form.level, form.hitDie],
-  );
+  const activeRuleset = form.rulesetKey === "CUSTOM" ? form.customRuleset : rulesets[form.rulesetKey];
   const calculatedHp = derivedStats.hitPoints;
-  const hpStat = activeRuleset.derivedStats?.find((stat) => stat.id === "hitPoints");
+  const hpStat = activeRuleset?.derivedStats?.find((stat) => stat.id === "hitPoints");
+
+  useEffect(() => {
+    CharacterService.getRulesets()
+      .then((definitions) => {
+        const loadedRulesets = Object.fromEntries(definitions.map((ruleset) => [
+          ruleset.id === "dnd5e" ? "DND_5E"
+            : ruleset.id === "call-of-cthulhu-7e" ? "CALL_OF_CTHULHU_7E"
+              : ruleset.id === "pathfinder2e" ? "PATHFINDER_2E" : "CUSTOM",
+          ruleset,
+        ]));
+        setRulesets(loadedRulesets);
+        setForm((previous) => {
+          if (previous.values && Object.keys(previous.values).length > 0) return previous;
+          const defaultRuleset = loadedRulesets.DND_5E || loadedRulesets.CUSTOM;
+          return {
+            ...createInitialForm(),
+            rulesetKey: defaultRuleset === loadedRulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+            archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
+            hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+            values: valuesForRuleset(defaultRuleset),
+            customRuleset: loadedRulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
+          };
+        });
+      })
+      .catch((error) => {
+        console.error("Failed to load rulesets:", error);
+        setRulesetsError("Failed to load character rulesets from the server.");
+      })
+      .finally(() => setIsLoadingRulesets(false));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    CharacterService.calculate({
+      rulesetKey: form.rulesetKey,
+      rulesetSchema: form.rulesetKey === "CUSTOM" ? form.customRuleset : undefined,
+      values: form.values,
+      level: Number(form.level) || 1,
+      hitDie: Number(form.hitDie) || 8,
+    })
+      .then((result) => {
+        if (active) setDerivedStats(result.derivedStats || {});
+      })
+      .catch((error) => {
+        console.error("Failed to calculate character stats:", error);
+        if (active) setDerivedStats({});
+      })
+    return () => { active = false; };
+  }, [form.rulesetKey, form.customRuleset, form.values, form.level, form.hitDie]);
 
   const fetchCharacters = useCallback(async () => {
     if (!user) {
@@ -171,7 +244,7 @@ export default function Character() {
 
   const selectRuleset = (event) => {
     const rulesetKey = event.target.value;
-    const ruleset = RULESET_PRESETS[rulesetKey];
+    const ruleset = rulesetKey === "CUSTOM" ? form.customRuleset : rulesets[rulesetKey];
     setForm((previous) => ({
       ...previous,
       rulesetKey,
@@ -298,7 +371,15 @@ export default function Character() {
   };
 
   const resetForm = () => {
-    setForm(createInitialForm());
+    const defaultRuleset = rulesets.DND_5E || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET;
+    setForm({
+      ...createInitialForm(),
+      rulesetKey: defaultRuleset === rulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+      archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
+      hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+      values: valuesForRuleset(defaultRuleset),
+      customRuleset: rulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
+    });
     setEditingId(null);
   };
 
@@ -339,11 +420,11 @@ export default function Character() {
   };
 
   const handleEdit = (character) => {
-    const key = Object.keys(RULESET_PRESETS).find((presetKey) => RULESET_PRESETS[presetKey].name === character.ruleset);
+    const key = Object.keys(rulesets).find((presetKey) => rulesets[presetKey].name === character.ruleset);
     const rulesetKey = key || "CUSTOM";
     const ruleset = rulesetKey === "CUSTOM"
-      ? (character.attributes?.rulesetSchema || RULESET_PRESETS.CUSTOM)
-      : RULESET_PRESETS[rulesetKey];
+      ? (character.attributes?.rulesetSchema || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET)
+      : rulesets[rulesetKey];
     const savedArchetype = character.attributes?.archetype;
     const legacyCustomArchetype = rulesetKey === "CUSTOM"
       && character.characterClass
@@ -392,6 +473,19 @@ export default function Character() {
     } catch (error) {
       console.error("Delete failed:", error);
       setFeedback({ type: "danger", message: "Failed to delete character." });
+    }
+  };
+
+  const exportFormPdf = async () => {
+    try {
+      await exportCharacterPdf(
+      exportDataForForm(form, activeRuleset, derivedStats),
+      activeRuleset,
+      derivedStats,
+      );
+    } catch (error) {
+      console.error("Character PDF export failed:", error);
+      setFeedback({ type: "danger", message: "Failed to export the character sheet as PDF." });
     }
   };
 
@@ -451,6 +545,14 @@ export default function Character() {
       setIsSubmitting(false);
     }
   };
+
+  if (isLoadingRulesets) {
+    return <div className="container py-4">Loading character rulesets...</div>;
+  }
+
+  if (rulesetsError) {
+    return <div className="container py-4"><div className="alert alert-danger" role="alert">{rulesetsError}</div></div>;
+  }
 
   return (
     <div className="container py-4 character-page">
@@ -523,7 +625,7 @@ export default function Character() {
                   <div className="col-md-6">
                     <label className="form-label fw-semibold">System Ruleset</label>
                     <select className="form-select" value={form.rulesetKey} onChange={selectRuleset}>
-                      {Object.entries(RULESET_PRESETS).map(([key, ruleset]) => (
+                      {Object.entries(rulesets).map(([key, ruleset]) => (
                         <option key={key} value={key}>
                           {ruleset.name}
                         </option>
@@ -699,6 +801,14 @@ export default function Character() {
                 />
                 <div className="d-grid">
                   <button
+                    type="button"
+                    className="btn btn-outline-primary mb-2"
+                    onClick={exportFormPdf}
+                    disabled={!activeRuleset}
+                  >
+                    Export Character Sheet PDF
+                  </button>
+                  <button
                     type="submit"
                     className="btn btn-primary btn-lg"
                     disabled={isSubmitting || !user}
@@ -746,8 +856,8 @@ export default function Character() {
               ) : (
                 <div className="d-flex flex-column gap-3">
                   {savedCharacters.map((character) => {
-                    const fieldNames = namedFields(rulesetForCharacter(character));
-                    const { currentHp, maxHp } = hpForCharacter(character);
+                    const fieldNames = namedFields(rulesetForCharacter(character, rulesets));
+                    const { currentHp, maxHp } = hpForCharacter(character, rulesets);
 
                     return (
                       <div
@@ -790,6 +900,29 @@ export default function Character() {
                             </button>
                             <button
                               type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={async () => {
+                                try {
+                                  await exportCharacterPdf(
+                                    character,
+                                    rulesetForCharacter(character, rulesets),
+                                    character.attributes?.derivedStats || evaluateDerivedStats(
+                                      rulesetForCharacter(character, rulesets),
+                                      character.attributes?.values || {},
+                                      character.level,
+                                      character.attributes?.hitDie,
+                                    ),
+                                  );
+                                } catch (error) {
+                                  console.error("Character PDF export failed:", error);
+                                  setFeedback({ type: "danger", message: "Failed to export the character sheet as PDF." });
+                                }
+                              }}
+                            >
+                              PDF
+                            </button>
+                            <button
+                              type="button"
                               className="btn btn-sm btn-outline-danger"
                               onClick={() => handleDelete(character.id, character.name)}
                             >
@@ -805,49 +938,6 @@ export default function Character() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
-
-function AttributeInput({ field, value, values, onChange }) {
-  const modifier = field.modifier ? evaluateFormula(field.modifier, values) : null;
-  return (
-    <div className="col-6 col-md-4">
-      <div className="p-2 border rounded bg-light">
-        <label className="form-label mb-1 fw-bold">{field.label}</label>
-        {field.type === "select" ? (
-          <select
-            className="form-select form-select-sm"
-            value={value}
-            onChange={(event) => onChange(field.id, event.target.value)}
-          >
-            {field.options?.map((option) => (
-              <option key={option}>{option}</option>
-            ))}
-          </select>
-        ) : (
-          <input
-            type="number"
-            className="form-control form-control-sm text-center fw-bold"
-            min={field.min}
-            max={field.max}
-            step={field.step || 1}
-            value={value}
-            onChange={(event) => onChange(field.id, Number(event.target.value))}
-          />
-        )}
-        {field.model === "percentile" && (
-          <small className="text-muted d-block mt-1">
-            Half: {Math.floor(Number(value) / 2)} · Fifth: {Math.floor(Number(value) / 5)}
-          </small>
-        )}
-        {modifier !== null && (
-          <small className="text-muted d-block mt-1">
-            Modifier: {modifierLabel(modifier)}
-          </small>
-        )}
-        {field.description && <small className="text-muted">{field.description}</small>}
       </div>
     </div>
   );

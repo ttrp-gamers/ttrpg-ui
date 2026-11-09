@@ -1,0 +1,180 @@
+.overview-page {
+  color: var(--text);
+}
+
+/* lets flex children shrink so long text can truncate */
+.overview-main,
+.friends-info {
+  min-width: 0;
+}
+
+/* Friends sidebar */
+
+.friends-sidebar {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--wood) 92%, transparent),
+    color-mix(in srgb, var(--wood-dark) 96%, transparent)
+  );
+  border-top: 2px solid var(--bronze);
+}
+
+/* Side panel on md and up; Bootstrap has no fixed-width or full-height-only-on-md utility */
+@media (min-width: 768px) {
+  .friends-sidebar {
+    flex: 0 0 300px;
+    height: 100vh;
+    overflow-y: auto;
+    border-top: none;
+    border-left: 2px solid var(--bronze);
+    box-shadow:
+      inset 3px 0 0 var(--wood-deep),
+      -6px 0 20px rgba(0, 0, 0, 0.4);
+  }
+}
+
+.friends-title {
+  color: var(--gold-light);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.friends-section-title {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.friends-divider {
+  border-color: var(--gold);
+  opacity: 0.25;
+}
+
+.friends-empty {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.friends-row--pending {
+  opacity: 0.6;
+}
+
+.friends-name {
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.friends-subtext {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+/* Avatar with initials and a status dot */
+
+.friends-avatar {
+  width: 38px;
+  height: 38px;
+  color: var(--gold-light);
+  background: var(--wood-deep);
+  border: 2px solid var(--wood-highlight);
+  border-radius: 50%;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.friends-status-dot {
+  right: -2px;
+  bottom: -2px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--wood);
+  border-radius: 50%;
+}
+
+.friends-status-dot--online {
+  background: var(--status-online);
+}
+
+.friends-status-dot--in_game {
+  background: var(--orange);
+}
+
+/* opaque mix so the avatar border doesn't show through the dot */
+.friends-status-dot--offline {
+  background: color-mix(in srgb, var(--muted) 45%, var(--wood));
+}
+
+/* Buttons */
+
+.friends-link-button {
+  color: var(--gold);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.friends-link-button:hover {
+  color: var(--gold-light);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+
+.friends-icon-button {
+  width: 28px;
+  height: 28px;
+  color: var(--muted);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+}
+
+.friends-icon-button:hover {
+  color: var(--gold-light);
+  border-color: color-mix(in srgb, var(--gold) 35%, transparent);
+}
+
+.friends-link-button:disabled,
+.friends-icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.friends-link-button:disabled:hover,
+.friends-icon-button:disabled:hover {
+  color: inherit;
+  background: none;
+  border-color: transparent;
+}
+
+/* Add-friend input and error message */
+
+.friends-input {
+  min-width: 0;
+  color: var(--text);
+  background: var(--wood-deep);
+  border: 1px solid var(--wood-highlight);
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+.friends-input::placeholder {
+  color: color-mix(in srgb, var(--muted) 70%, transparent);
+}
+
+.friends-input:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--gold) 16%, transparent);
+}
+
+.friends-error {
+  color: var(--gold-light);
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
+  border-left: 3px solid var(--orange);
+  border-radius: 4px;
+  font-size: 0.8rem;
+}

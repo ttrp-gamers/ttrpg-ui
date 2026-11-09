@@ -73,12 +73,16 @@ api.interceptors.response.use(
   },
 );
 
+export type PlayerStatus = "OFFLINE" | "ONLINE" | "IN_GAME";
+
 export interface ProfileResponse {
-    id: number;
-    username: string;
-    email: string;
-    avatarUrl: string | null;
-    bio: string | null;
+  id: number;
+  username: string;
+  email: string;
+  avatarUrl: string | null;
+  bio: string | null;
+  // can be null for users created before the status column existed... everyone drops their db orrr.....??
+  playerStatus: PlayerStatus | null;
 }
 
 export interface UpdateProfileBody {
@@ -95,6 +99,7 @@ export const getProfile = () =>
 export const updateProfile = (body: UpdateProfileBody) =>
     api.put<ProfileResponse>('/v1/user/profile', body).then((res) => res.data);
 
-
-
-
+export const updateStatus = (playerStatus: PlayerStatus) =>
+  api
+    .put<ProfileResponse>("/v1/user/status", { playerStatus })
+    .then((res) => res.data);

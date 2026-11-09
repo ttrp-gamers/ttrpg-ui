@@ -27,8 +27,7 @@ src/
 │   │   └── LoadingSpinner.jsx
 │   │
 │   └── shared/                 # Components shared across SOME pages (e.g., 2+ views)
-│       ├── StatCard.jsx        # Used in Overview & Character Details
-│       └── CharacterList.jsx   # Used in Overview & PDF Export selection
+│       └── StatCard.jsx        # Used in Overview & Character Details
 │
 ├── layouts/                    # LAYOUT SHELLS (Outer Frames & Outlets)
 │   ├── AppLayout.jsx           # Main Shell: Navbar + Sidebar + <Outlet />
