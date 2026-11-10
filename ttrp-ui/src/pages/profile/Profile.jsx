@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import "./Profile.css";
-import { getProfile, updateProfile } from "../../services/Api";
+import {deactivateAccount, getProfile, updateProfile} from "../../services/Api";
 
 const errorText = (err) => err.response?.data?.message || err.message;
 
@@ -57,6 +57,25 @@ export default function Profile() {
 
     if (!profile) return <p className="profile-page">{error || "Loading..."}</p>;
 
+    async function handleDeactivate(e) {
+        e.preventDefault();
+        setError("");
+        setMessage("");
+
+        const body = {
+            confirmPassword: form.confirmPassword,
+            refreshToken: localStorage.getItem("refreshToken")
+        };
+
+        try {
+            await deactivateAccount(body);
+            localStorage.clear();
+            window.location.href = "/"
+        } catch (err) {
+            setError(errorText(err))
+        }
+    }
+
     return (
         <div className="profile-page">
             <h1 className="profile-title">My profile</h1>
@@ -85,6 +104,14 @@ export default function Profile() {
                 {message && <p className="profile-message profile-message--success">{message}</p>}
                 {error && <p className="profile-message profile-message--error">{error}</p>}
                 <button className="profile-button" type="submit">Save</button>
+            </form>
+
+            <form className="profile-form" onSubmit={handleDeactivate}>
+                <h2 className="profile-section-title">! DEACTIVATE ACCOUNT (PERMANENT) !</h2>
+                <input name="confirmPassword" type="password" placeholder="Confirm current password to deactivate your account"
+                       value={form.confirmPassword} onChange={handleChange} />
+
+                <button className="profile-button" type="submit">DEACTIVATE</button>
             </form>
         </div>
     );
