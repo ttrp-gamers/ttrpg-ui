@@ -26,4 +26,21 @@ export const MapService = {
     const response = await api.get(`/v1/map/state/${encodedName}`);
     return response.data;
   },
+  saveMapState: async (mapObjectRequest) => {
+      const response = await api.post("/v1/map/state", mapObjectRequest);
+      return response.data;
+    },
+    importBackground: async (formData) => {
+    const response = await api.post("/v1/map/import/bg", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
+
+  importObject: async (formData) => {
+    const response = await api.post("/v1/map/import/obj", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+    return response.data;
+  },
 };

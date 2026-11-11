@@ -28,7 +28,6 @@ export default function CreateMap() {
 
     try {
       const createdMap = await MapService.createMap(payload);
-      onMapCreated(createdMap);
       setMapName("");
     } catch (err) {
       console.error("Failed to create map:", err);
