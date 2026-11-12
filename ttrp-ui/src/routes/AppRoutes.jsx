@@ -6,7 +6,7 @@ import AppLayout from "../layouts/AppLayout.jsx";
 import Overview from "../pages/overview/Overview.jsx";
 import Character from "../pages/character/Character.jsx";
 import Profile from "../pages/profile/Profile.jsx";
-import Admin from "../pages/admin/Admin.jsx";
+import Admin from "../pages/admin/Admin.tsx";
 import Map from "../pages/map/Map.jsx";
 
 export default function AppRoutes() {
