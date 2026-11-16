@@ -1,6 +1,6 @@
 import "./Character.css";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CharacterService } from "../../services/CharacterService";
 import { useAuth } from "../auth/AuthContext";
@@ -35,7 +35,7 @@ const DND_HIT_DICE = {
 };
 
 function hitDieFor(rulesetKey, archetype) {
-  return rulesetKey === "DND_5E" ? DND_HIT_DICE[archetype] || 8 : DEFAULT_HIT_DIE;
+  return rulesetKey.startsWith("DND_5E") ? DND_HIT_DICE[archetype] || 8 : DEFAULT_HIT_DIE;
 }
 
 function valuesForRuleset(ruleset, existing = {}) {
@@ -48,9 +48,14 @@ function valuesForRuleset(ruleset, existing = {}) {
 function createInitialForm() {
   return {
     name: "",
-    rulesetKey: "DND_5E",
+    rulesetKey: "DND_5E_2014",
     archetype: "",
+    subclass: "",
     customArchetype: "",
+    species: "",
+    background: "",
+    alignment: "",
+    notes: "",
     level: 1,
     hitDie: DEFAULT_HIT_DIE,
     values: {},
@@ -66,13 +71,13 @@ function displayNumber(value) {
   return value === null || value === undefined ? "—" : value;
 }
 
-function rulesetFileName(name) {
-  const safeName = String(name || "custom-ruleset")
-    .trim()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase();
-  return `${safeName || "custom-ruleset"}.json`;
+function saveErrorMessage(error) {
+  const response = error?.response?.data;
+  const validationErrors = response?.validationErrors;
+  if (validationErrors && typeof validationErrors === "object") {
+    return Object.values(validationErrors).join(" ");
+  }
+  return response?.detail || response?.message || error?.message || "Failed to save character sheet to account.";
 }
 
 function namedFields(ruleset) {
@@ -140,22 +145,27 @@ function exportDataForForm(form, activeRuleset, derivedStats) {
   return {
     name: form.name || "character-sheet",
     characterClass: effectiveArchetype,
+    species: form.species,
+    background: form.background,
+    alignment: form.alignment,
+    notes: form.notes,
     level: Number(form.level) || 1,
     ruleset: activeRuleset.name,
     maxHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.maxHp,
     currentHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.currentHp,
     attributes: {
       rulesetKey: form.rulesetKey,
+      rulesetSchema: form.rulesetKey === "CUSTOM" ? form.customRuleset : undefined,
       values: form.values,
       resources: form.resources,
       hitDie: form.hitDie,
+      subclass: form.subclass,
     },
   };
 }
 
 export default function Character() {
   const { user } = useAuth();
-  const importRef = useRef(null);
   const [form, setForm] = useState(createInitialForm);
   const [editingId, setEditingId] = useState(null);
   const [savedCharacters, setSavedCharacters] = useState([]);
@@ -165,30 +175,44 @@ export default function Character() {
   const [rulesets, setRulesets] = useState({});
   const [isLoadingRulesets, setIsLoadingRulesets] = useState(true);
   const [rulesetsError, setRulesetsError] = useState(null);
+  const [catalog, setCatalog] = useState({
+    classes2014: [],
+    subclasses2014: [],
+    classes2024: [],
+    subclasses2024: [],
+    species: [],
+    backgrounds: [],
+  });
   const [derivedStats, setDerivedStats] = useState({});
 
   const activeRuleset = form.rulesetKey === "CUSTOM" ? form.customRuleset : rulesets[form.rulesetKey];
   const calculatedHp = derivedStats.hitPoints;
   const hpStat = activeRuleset?.derivedStats?.find((stat) => stat.id === "hitPoints");
+  const catalogVersion = form.rulesetKey === "DND_5E_2024" ? "2024" : "2014";
+  const classEntries = catalog[`classes${catalogVersion}`] || [];
+  const subclassEntries = (catalog[`subclasses${catalogVersion}`] || []).filter(
+    (entry) => entry.subclass_of?.name === form.archetype
+      || entry.subclass_of?.key === classEntries.find((classEntry) => classEntry.name === form.archetype)?.key,
+  );
 
   useEffect(() => {
-    CharacterService.getRulesets()
-      .then((definitions) => {
+    Promise.all([CharacterService.getRulesets(), CharacterService.getCatalog()])
+      .then(([definitions, characterCatalog]) => {
+        setCatalog(characterCatalog);
         const loadedRulesets = Object.fromEntries(definitions.map((ruleset) => [
-          ruleset.id === "dnd5e" ? "DND_5E"
-            : ruleset.id === "call-of-cthulhu-7e" ? "CALL_OF_CTHULHU_7E"
-              : ruleset.id === "pathfinder2e" ? "PATHFINDER_2E" : "CUSTOM",
+              ruleset.id === "DND_5E_2014" ? "DND_5E_2014"
+                : ruleset.id === "DND_5E_2024" ? "DND_5E_2024" : "CUSTOM",
           ruleset,
         ]));
         setRulesets(loadedRulesets);
         setForm((previous) => {
           if (previous.values && Object.keys(previous.values).length > 0) return previous;
-          const defaultRuleset = loadedRulesets.DND_5E || loadedRulesets.CUSTOM;
+          const defaultRuleset = loadedRulesets.DND_5E_2014 || loadedRulesets.CUSTOM;
           return {
             ...createInitialForm(),
-            rulesetKey: defaultRuleset === loadedRulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+            rulesetKey: defaultRuleset === loadedRulesets.CUSTOM ? "CUSTOM" : "DND_5E_2014",
             archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
-            hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+            hitDie: hitDieFor("DND_5E_2014", defaultRuleset.archetypes?.[4]),
             values: valuesForRuleset(defaultRuleset),
             customRuleset: loadedRulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
           };
@@ -249,6 +273,7 @@ export default function Character() {
       ...previous,
       rulesetKey,
       archetype: ruleset.archetypes?.[0] || "",
+      subclass: "",
       values: valuesForRuleset(ruleset),
       resources: Object.fromEntries((ruleset.resources || []).map((resource) => [resource.id, resource.defaultValue ?? 0])),
       hitDie: hitDieFor(rulesetKey, ruleset.archetypes?.[0]),
@@ -263,6 +288,7 @@ export default function Character() {
     setForm((previous) => ({
       ...previous,
       archetype,
+      subclass: "",
       hitDie: hitDieFor(previous.rulesetKey, archetype),
     }));
   };
@@ -371,56 +397,21 @@ export default function Character() {
   };
 
   const resetForm = () => {
-    const defaultRuleset = rulesets.DND_5E || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET;
+    const defaultRuleset = rulesets.DND_5E_2014 || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET;
     setForm({
       ...createInitialForm(),
-      rulesetKey: defaultRuleset === rulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+      rulesetKey: defaultRuleset === rulesets.CUSTOM ? "CUSTOM" : "DND_5E_2014",
       archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
-      hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+      hitDie: hitDieFor("DND_5E_2014", defaultRuleset.archetypes?.[4]),
       values: valuesForRuleset(defaultRuleset),
       customRuleset: rulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
     });
     setEditingId(null);
   };
 
-  const exportRuleset = () => {
-    const blob = new Blob([JSON.stringify(form.customRuleset, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = rulesetFileName(form.customRuleset.name);
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importRuleset = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const imported = JSON.parse(String(reader.result));
-        if (!imported.id || !imported.name || !Array.isArray(imported.sections)) throw new Error("Invalid ruleset schema");
-        setForm((previous) => ({
-          ...previous,
-          rulesetKey: "CUSTOM",
-          customRuleset: imported,
-          values: valuesForRuleset(imported),
-          resources: Object.fromEntries((imported.resources || []).map((resource) => [resource.id, resource.defaultValue ?? 0])),
-          autoCalculateHp: false,
-        }));
-        setFeedback({ type: "success", message: "Custom ruleset imported." });
-      } catch (error) {
-        console.error("Ruleset import failed:", error);
-        setFeedback({ type: "danger", message: "The selected file is not a valid ruleset JSON schema." });
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-  };
-
   const handleEdit = (character) => {
-    const key = Object.keys(rulesets).find((presetKey) => rulesets[presetKey].name === character.ruleset);
+    const key = Object.keys(rulesets).find((presetKey) => rulesets[presetKey].name === character.ruleset)
+      || (character.ruleset === "Dungeons & Dragons 5e" ? "DND_5E_2014" : null);
     const rulesetKey = key || "CUSTOM";
     const ruleset = rulesetKey === "CUSTOM"
       ? (character.attributes?.rulesetSchema || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET)
@@ -448,9 +439,14 @@ export default function Character() {
       archetype: rulesetKey === "CUSTOM"
         ? (savedCustomArchetype ? "Custom" : savedArchetype || ruleset.archetypes?.[0] || "")
         : (savedArchetype || character.characterClass || ruleset.archetypes?.[0] || ""),
+      subclass: character.attributes?.subclass || "",
       customArchetype: savedCustomArchetype,
+      species: character.species || "",
+      background: character.background || "",
+      alignment: character.alignment || "",
+      notes: character.notes || "",
       level: character.level || 1,
-      hitDie: rulesetKey === "DND_5E"
+      hitDie: rulesetKey.startsWith("DND_5E")
         ? hitDieFor(rulesetKey, character.characterClass)
         : character.attributes?.hitDie || DEFAULT_HIT_DIE,
       values: valuesForRuleset(ruleset, savedValues),
@@ -507,6 +503,10 @@ export default function Character() {
     const payload = {
       name: form.name.trim(),
       characterClass: effectiveArchetype,
+      species: form.species,
+      background: form.background,
+      alignment: form.alignment,
+      notes: form.notes,
       level: Number(form.level) || 1,
       ruleset: activeRuleset.name,
       maxHp: Number(effectiveMaxHp) || 1,
@@ -540,14 +540,14 @@ export default function Character() {
       await fetchCharacters();
     } catch (error) {
       console.error("Save failed:", error);
-      setFeedback({ type: "danger", message: error.response?.data?.message || "Failed to save character sheet to account." });
+      setFeedback({ type: "danger", message: saveErrorMessage(error) });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   if (isLoadingRulesets) {
-    return <div className="container py-4">Loading character rulesets...</div>;
+    return <div className="container py-4 character-rulesets-loading" role="status">Loading character rulesets...</div>;
   }
 
   if (rulesetsError) {
@@ -605,6 +605,46 @@ export default function Character() {
                       required
                     />
                   </div>
+                  {form.rulesetKey.startsWith("DND_5E") && (
+                    <>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Species</label>
+                        <select className="form-select" value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {catalog.species.map((entry) => <option key={entry.key} value={entry.name}>{entry.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Background</label>
+                        <select className="form-select" value={form.background} onChange={(e) => setForm({ ...form, background: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {catalog.backgrounds.map((entry) => <option key={entry.key} value={entry.name}>{entry.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Alignment</label>
+                        <select className="form-select" value={form.alignment} onChange={(e) => setForm({ ...form, alignment: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {[
+                            "Lawful Good",
+                            "Neutral Good",
+                            "Chaotic Good",
+                            "Lawful Neutral",
+                            "True Neutral",
+                            "Chaotic Neutral",
+                            "Lawful Evil",
+                            "Neutral Evil",
+                            "Chaotic Evil",
+                            "Unaligned",
+                          ].map((alignment) => <option key={alignment} value={alignment}>{alignment}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  <div className="col-12">
+                    <label className="form-label fw-semibold">Notes</label>
+                    <textarea className="form-control" rows="2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                  </div>
                   <div className="col-md-5">
                     <label className="form-label fw-semibold">
                       {activeRuleset.terminology.level || "Level"}
@@ -638,12 +678,30 @@ export default function Character() {
                     </label>
                     <select className="form-select" value={form.archetype} onChange={selectArchetype}>
                       <option value="">— Select —</option>
-                      {(activeRuleset.archetypes || []).map((archetype) => (
+                      {(classEntries.length > 0
+                        ? classEntries.map((entry) => entry.name)
+                        : activeRuleset.archetypes || []).map((archetype) => (
                         <option key={archetype}>{archetype}</option>
                       ))}
                       {form.rulesetKey === "CUSTOM" && <option value="Custom">Custom</option>}
                     </select>
                   </div>
+                  {form.rulesetKey.startsWith("DND_5E") && (
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold">Subclass</label>
+                      <select
+                        className="form-select"
+                        value={form.subclass}
+                        onChange={(e) => setForm((previous) => ({ ...previous, subclass: e.target.value }))}
+                        disabled={!form.archetype || subclassEntries.length === 0}
+                      >
+                        <option value="">— Select —</option>
+                        {subclassEntries.map((entry) => (
+                          <option key={entry.key} value={entry.name}>{entry.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {form.archetype === "Custom" && (
                     <div className="col-md-6">
                       <label className="form-label">
@@ -656,7 +714,7 @@ export default function Character() {
                       />
                     </div>
                   )}
-                  {form.rulesetKey === "DND_5E" && (
+                  {form.rulesetKey.startsWith("DND_5E") && (
                     <div className="col-md-3">
                       <label className="form-label">Hit Die</label>
                       <input
@@ -725,7 +783,7 @@ export default function Character() {
                 )}
 
                 {(hpStat || form.rulesetKey === "CUSTOM") && (
-                  <div className="row g-3 align-items-center mb-4 p-3 border rounded">
+                  <div className="row g-3 align-items-center mb-4">
                     <div className="col-md-5">
                       <label className="form-label fw-bold text-success mb-1">
                         {hpStat?.label || "Maximum HP"}
@@ -788,17 +846,8 @@ export default function Character() {
                     onResourceAdd={addResource}
                     onResourceChange={updateResourceDefinition}
                     onResourceRemove={removeResource}
-                    onImport={() => importRef.current?.click()}
-                    onExport={exportRuleset}
                   />
                 )}
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="d-none"
-                  onChange={importRuleset}
-                />
                 <div className="d-grid">
                   <button
                     type="button"
@@ -955,8 +1004,6 @@ function CustomBuilder({
   onResourceAdd,
   onResourceChange,
   onResourceRemove,
-  onImport,
-  onExport,
 }) {
   const fields = ruleset.sections.flatMap((section) => section.fields);
   return (
@@ -965,14 +1012,6 @@ function CustomBuilder({
         <h6 className="text-uppercase text-secondary fw-bold mb-0">
           Custom Ruleset Builder
         </h6>
-        <div className="btn-group btn-group-sm">
-          <button type="button" className="btn btn-outline-secondary" onClick={onImport}>
-            Import JSON
-          </button>
-          <button type="button" className="btn btn-outline-secondary" onClick={onExport}>
-            Export JSON
-          </button>
-        </div>
       </div>
 
       <div className="row g-2 mt-2">
