@@ -6,9 +6,8 @@ import AppLayout from "../layouts/AppLayout.jsx";
 import Overview from "../pages/overview/Overview.jsx";
 import Character from "../pages/character/Character.jsx";
 import Profile from "../pages/profile/Profile.jsx";
-import Admin from "../pages/admin/Admin.jsx";
+import Admin from "../pages/admin/Admin.tsx";
 import Map from "../pages/map/Map.jsx";
-import MapDragDrop from "../pages/map/MapDragDrop.jsx"
 
 export default function AppRoutes() {
   return (
@@ -25,7 +24,6 @@ export default function AppRoutes() {
         <Route path="/overview" element={<Overview />} />
         <Route path="/character" element={<Character />} />
         <Route path="/map" element={<Map />} />
-        <Route path="/mapDragDrop" element={<MapDragDrop/>} />
       </Route>
     </Routes>
 

@@ -29,9 +29,6 @@ export default function Navbar() {
           <Link className="nav-link" to="/map">
             maps
           </Link>
-          <Link className="nav-link" to="/mapDragDrop">
-            mapDropDrop
-          </Link>
           <Link className="nav-link" to="/profile">
             profile
           </Link>
