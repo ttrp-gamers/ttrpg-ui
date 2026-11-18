@@ -11,7 +11,14 @@ export function AttributeInput({ field, value, values, onChange }) {
     <div className="col-6 col-md-4">
       <div className="p-2 border rounded bg-light">
         <label className="form-label mb-1 fw-bold">{field.label}</label>
-        {field.type === "select" ? (
+        {field.type === "text" || field.model === "text" ? (
+          <textarea
+            className="form-control form-control-sm"
+            rows={field.rows || 3}
+            value={value ?? ""}
+            onChange={(event) => onChange(field.id, event.target.value)}
+          />
+        ) : field.type === "select" ? (
           <select
             className="form-select form-select-sm"
             value={value}
@@ -41,5 +48,46 @@ export function AttributeInput({ field, value, values, onChange }) {
         {field.description && <small className="text-muted">{field.description}</small>}
       </div>
     </div>
+  );
+}
+
+export function RulesetAttributeSections({ ruleset, values, onChange }) {
+  return (ruleset.sections || []).map((section) => (
+    <section key={section.id} className="mb-4">
+      <h6 className="text-uppercase text-secondary fw-bold mb-3">{section.title}</h6>
+      <div className="row g-2">
+        {(section.fields || []).map((field) => (
+          <AttributeInput
+            key={field.id}
+            field={field}
+            value={values[field.id] ?? field.defaultValue ?? (field.type === "text" || field.model === "text" ? "" : 0)}
+            values={values}
+            onChange={onChange}
+          />
+        ))}
+      </div>
+    </section>
+  ));
+}
+
+export function RulesetResources({ resources, values, onChange, className = "" }) {
+  if (!resources?.length) return null;
+  return (
+    <section className={`mb-4 ${className}`}>
+      <h6 className="text-uppercase text-secondary fw-bold mb-3">Resources</h6>
+      <div className="row g-2">
+        {resources.map((resource) => (
+          <div className="col-6 col-md-4" key={resource.id}>
+            <label className="form-label">{resource.label}</label>
+            <input
+              type="number"
+              className="form-control"
+              value={values[resource.id] ?? resource.defaultValue ?? 0}
+              onChange={(event) => onChange(resource.id, Number(event.target.value))}
+            />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

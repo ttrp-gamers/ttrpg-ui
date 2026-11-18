@@ -125,6 +125,26 @@
   color: var(--muted);
 }
 
+.character-page .monster-search-pagination .page-link {
+  border-color: var(--wood-highlight);
+  background: #29180f;
+  color: var(--gold-light);
+  box-shadow: none;
+}
+
+.character-page .monster-search-pagination .page-item.active .page-link {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--wood-dark);
+  font-weight: bold;
+}
+
+.character-page .monster-search-pagination .page-item.disabled .page-link {
+  border-color: rgba(152, 100, 59, 0.45);
+  background: rgba(41, 24, 15, 0.65);
+  color: var(--muted);
+}
+
 /* Keep the native number steppers legible against the dark wood inputs. */
 .character-page input[type="number"] {
   color-scheme: dark;
