@@ -74,6 +74,7 @@ api.interceptors.response.use(
 );
 
 export type PlayerStatus = "OFFLINE" | "ONLINE" | "IN_GAME";
+export type AccountStatus = "PENDING" | "ACTIVE" | "DEACTIVATED";
 
 export interface ProfileResponse {
   id: number;
@@ -83,6 +84,7 @@ export interface ProfileResponse {
   bio: string | null;
   // can be null for users created before the status column existed... everyone drops their db orrr.....??
   playerStatus: PlayerStatus | null;
+  accountStatus: AccountStatus;
 }
 
 export interface UpdateProfileBody {
@@ -91,6 +93,10 @@ export interface UpdateProfileBody {
     bio?: string;
     currentPassword?: string;
     newPassword?: string;
+}
+
+export interface DeactivationBody {
+    confirmPassword?: string;
 }
 
 export const getProfile = () =>
@@ -103,3 +109,7 @@ export const updateStatus = (playerStatus: PlayerStatus) =>
   api
     .put<ProfileResponse>("/v1/user/status", { playerStatus })
     .then((res) => res.data);
+
+export const deactivateAccount = (body: DeactivationBody) =>
+    api.delete<ProfileResponse>("/v1/user/profile", { data: body })
+        .then((res) => res.data);
