@@ -1,17 +1,36 @@
 import "./Character.css";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { CharacterService } from "../../services/CharacterService";
 import { useAuth } from "../auth/AuthContext";
-import { AttributeInput } from "./components/CharacterFields";
+import { RulesetAttributeSections, RulesetResources } from "./components/CharacterFields";
+import CustomRulesetBuilder from "./components/CustomRulesetBuilder";
+import { MonsterEditor, MonsterManager, MonsterOverview } from "./components/MonsterManager";
 import { evaluateDerivedStats } from "./rulesets/formulaEngine";
+import {
+  addCustomField as addCustomFieldToRuleset,
+  addDerivedFormula as addDerivedFormulaToRuleset,
+  addResource as addResourceToRuleset,
+  removeCustomField as removeCustomFieldFromRuleset,
+  removeDerivedFormula as removeDerivedFormulaFromRuleset,
+  removeResource as removeResourceFromRuleset,
+  updateCustomField as updateCustomFieldInRuleset,
+  updateDerivedFormula as updateDerivedFormulaInRuleset,
+  updateResource as updateResourceInRuleset,
+} from "./rulesets/customRulesetUtils";
 import { exportCharacterPdf } from "./pdfExport";
 
 const DEFAULT_HIT_DIE = 8;
+const SYSTEM_RULESET_LABELS = {
+  DND_5E_2014: "Dungeons & Dragons 5e (2014)",
+  DND_5E_2024: "Dungeons & Dragons 5e (2024)",
+  CUSTOM: "Homebrew / Custom",
+};
+const SYSTEM_RULESET_ORDER = ["DND_5E_2014", "DND_5E_2024", "CUSTOM"];
 const EMPTY_CUSTOM_RULESET = {
   id: "custom",
-  name: "Homebrew (custom ruleset)",
+  name: "Homebrew/Custom",
   description: "Start with an empty ruleset and define the fields your game needs.",
   terminology: { archetype: "Archetype", level: "Level" },
   archetypes: [],
@@ -35,22 +54,27 @@ const DND_HIT_DICE = {
 };
 
 function hitDieFor(rulesetKey, archetype) {
-  return rulesetKey === "DND_5E" ? DND_HIT_DICE[archetype] || 8 : DEFAULT_HIT_DIE;
+  return rulesetKey.startsWith("DND_5E") ? DND_HIT_DICE[archetype] || 8 : DEFAULT_HIT_DIE;
 }
 
 function valuesForRuleset(ruleset, existing = {}) {
   return Object.fromEntries((ruleset.sections || []).flatMap((section) => section.fields || []).map((field) => [
     field.id,
-    existing[field.id] ?? field.defaultValue ?? (field.type === "text" ? "" : 0),
+    existing[field.id] ?? field.defaultValue ?? (field.type === "text" || field.model === "text" ? "" : 0),
   ]));
 }
 
 function createInitialForm() {
   return {
     name: "",
-    rulesetKey: "DND_5E",
+    rulesetKey: "DND_5E_2014",
     archetype: "",
+    subclass: "",
     customArchetype: "",
+    species: "",
+    background: "",
+    alignment: "",
+    notes: "",
     level: 1,
     hitDie: DEFAULT_HIT_DIE,
     values: {},
@@ -66,15 +90,14 @@ function displayNumber(value) {
   return value === null || value === undefined ? "—" : value;
 }
 
-function rulesetFileName(name) {
-  const safeName = String(name || "custom-ruleset")
-    .trim()
-    .replace(/[^a-z0-9]+/gi, "-")
-    .replace(/^-+|-+$/g, "")
-    .toLowerCase();
-  return `${safeName || "custom-ruleset"}.json`;
+function saveErrorMessage(error) {
+  const response = error?.response?.data;
+  const validationErrors = response?.validationErrors;
+  if (validationErrors && typeof validationErrors === "object") {
+    return Object.values(validationErrors).join(" ");
+  }
+  return response?.detail || response?.message || error?.message || "Failed to save character sheet to account.";
 }
-
 function namedFields(ruleset) {
   const seenNames = new Map();
   return new Map(
@@ -85,28 +108,6 @@ function namedFields(ruleset) {
       return [field.id, occurrence === 1 ? baseName : `${baseName} (${occurrence})`];
     }),
   );
-}
-
-function replaceFormulaNames(formula, ruleset, direction) {
-  const namesById = namedFields(ruleset);
-  const replacements = direction === "display"
-    ? [...namesById.entries()].map(([id, name]) => [id, name])
-    : [...namesById.entries()].map(([id, name]) => [name, id]);
-
-  return replacements
-    .sort(([left], [right]) => right.length - left.length)
-    .reduce((result, [from, to]) => {
-      const escaped = String(from).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      return result.replace(new RegExp(`(?<![A-Za-z0-9_])${escaped}(?![A-Za-z0-9_])`, "g"), to);
-    }, String(formula || ""));
-}
-
-function formulaForDisplay(formula, ruleset) {
-  return replaceFormulaNames(formula, ruleset, "display");
-}
-
-function formulaForStorage(formula, ruleset) {
-  return replaceFormulaNames(formula, ruleset, "storage");
 }
 
 function rulesetForCharacter(character, rulesets) {
@@ -137,25 +138,31 @@ function hpForCharacter(character, rulesets) {
 
 function exportDataForForm(form, activeRuleset, derivedStats) {
   const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
+  const hasCalculatedHp = derivedStats?.hitPoints !== null && derivedStats?.hitPoints !== undefined;
   return {
     name: form.name || "character-sheet",
     characterClass: effectiveArchetype,
+    species: form.species,
+    background: form.background,
+    alignment: form.alignment,
+    notes: form.notes,
     level: Number(form.level) || 1,
     ruleset: activeRuleset.name,
-    maxHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.maxHp,
-    currentHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.currentHp,
+    maxHp: hasCalculatedHp ? derivedStats.hitPoints : form.maxHp,
+    currentHp: form.autoCalculateHp && hasCalculatedHp ? derivedStats.hitPoints : form.currentHp,
     attributes: {
       rulesetKey: form.rulesetKey,
+      rulesetSchema: form.rulesetKey === "CUSTOM" ? form.customRuleset : undefined,
       values: form.values,
       resources: form.resources,
       hitDie: form.hitDie,
+      subclass: form.subclass,
     },
   };
 }
 
 export default function Character() {
   const { user } = useAuth();
-  const importRef = useRef(null);
   const [form, setForm] = useState(createInitialForm);
   const [editingId, setEditingId] = useState(null);
   const [savedCharacters, setSavedCharacters] = useState([]);
@@ -165,30 +172,46 @@ export default function Character() {
   const [rulesets, setRulesets] = useState({});
   const [isLoadingRulesets, setIsLoadingRulesets] = useState(true);
   const [rulesetsError, setRulesetsError] = useState(null);
+  const [catalog, setCatalog] = useState({
+    classes2014: [],
+    subclasses2014: [],
+    classes2024: [],
+    subclasses2024: [],
+    species: [],
+    backgrounds: [],
+  });
   const [derivedStats, setDerivedStats] = useState({});
+  const handleMonsterFeedback = useCallback((type, message) => setFeedback({ type, message }), []);
 
   const activeRuleset = form.rulesetKey === "CUSTOM" ? form.customRuleset : rulesets[form.rulesetKey];
   const calculatedHp = derivedStats.hitPoints;
+  const hasCalculatedHp = calculatedHp !== null && calculatedHp !== undefined;
   const hpStat = activeRuleset?.derivedStats?.find((stat) => stat.id === "hitPoints");
+  const catalogVersion = form.rulesetKey === "DND_5E_2024" ? "2024" : "2014";
+  const classEntries = catalog[`classes${catalogVersion}`] || [];
+  const subclassEntries = (catalog[`subclasses${catalogVersion}`] || []).filter(
+    (entry) => entry.subclass_of?.name === form.archetype
+      || entry.subclass_of?.key === classEntries.find((classEntry) => classEntry.name === form.archetype)?.key,
+  );
 
   useEffect(() => {
-    CharacterService.getRulesets()
-      .then((definitions) => {
+    Promise.all([CharacterService.getRulesets(), CharacterService.getCatalog()])
+      .then(([definitions, characterCatalog]) => {
+        setCatalog(characterCatalog);
         const loadedRulesets = Object.fromEntries(definitions.map((ruleset) => [
-          ruleset.id === "dnd5e" ? "DND_5E"
-            : ruleset.id === "call-of-cthulhu-7e" ? "CALL_OF_CTHULHU_7E"
-              : ruleset.id === "pathfinder2e" ? "PATHFINDER_2E" : "CUSTOM",
+              ruleset.id === "DND_5E_2014" ? "DND_5E_2014"
+                : ruleset.id === "DND_5E_2024" ? "DND_5E_2024" : "CUSTOM",
           ruleset,
         ]));
         setRulesets(loadedRulesets);
         setForm((previous) => {
           if (previous.values && Object.keys(previous.values).length > 0) return previous;
-          const defaultRuleset = loadedRulesets.DND_5E || loadedRulesets.CUSTOM;
+          const defaultRuleset = loadedRulesets.DND_5E_2014 || loadedRulesets.CUSTOM;
           return {
             ...createInitialForm(),
-            rulesetKey: defaultRuleset === loadedRulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+            rulesetKey: defaultRuleset === loadedRulesets.CUSTOM ? "CUSTOM" : "DND_5E_2014",
             archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
-            hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+            hitDie: hitDieFor("DND_5E_2014", defaultRuleset.archetypes?.[4]),
             values: valuesForRuleset(defaultRuleset),
             customRuleset: loadedRulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
           };
@@ -249,6 +272,7 @@ export default function Character() {
       ...previous,
       rulesetKey,
       archetype: ruleset.archetypes?.[0] || "",
+      subclass: "",
       values: valuesForRuleset(ruleset),
       resources: Object.fromEntries((ruleset.resources || []).map((resource) => [resource.id, resource.defaultValue ?? 0])),
       hitDie: hitDieFor(rulesetKey, ruleset.archetypes?.[0]),
@@ -263,6 +287,7 @@ export default function Character() {
     setForm((previous) => ({
       ...previous,
       archetype,
+      subclass: "",
       hitDie: hitDieFor(previous.rulesetKey, archetype),
     }));
   };
@@ -284,143 +309,56 @@ export default function Character() {
   };
 
   const addCustomField = () => {
-    const field = {
-      id: `attribute${Date.now()}`,
-      label: "New Attribute",
-      model: "raw",
-      defaultValue: 0,
-      min: 0,
-    };
     setForm((previous) => {
-      const sections = previous.customRuleset.sections || [];
-      const customRuleset = {
-        ...previous.customRuleset,
-        sections: sections.length
-          ? sections.map((section, index) => index === 0
-            ? { ...section, fields: [...(section.fields || []), field] }
-            : section)
-          : [{ id: "custom-attributes", title: "Custom Attributes", fields: [field] }],
-      };
-      return {
-        ...previous,
-        customRuleset,
-        values: { ...previous.values, [field.id]: field.defaultValue },
-      };
+      const result = addCustomFieldToRuleset(previous.customRuleset, previous.values, { min: 0 });
+      return { ...previous, customRuleset: result.ruleset, values: result.values };
     });
   };
 
-  const updateCustomField = (fieldId, patch) => {
-    updateCustomRuleset((ruleset) => ({
-      ...ruleset,
-      sections: ruleset.sections.map((section) => ({
-        ...section,
-        fields: section.fields.map((field) => field.id === fieldId ? { ...field, ...patch } : field),
-      })),
-    }));
-  };
+  const updateCustomField = (fieldId, patch) =>
+    updateCustomRuleset((ruleset) => updateCustomFieldInRuleset(ruleset, fieldId, patch));
 
   const removeCustomField = (fieldId) => {
     setForm((previous) => {
-      const customRuleset = {
-        ...previous.customRuleset,
-        sections: previous.customRuleset.sections.map((section) => ({
-          ...section,
-          fields: section.fields.filter((field) => field.id !== fieldId),
-        })),
-      };
-      const values = { ...previous.values };
-      delete values[fieldId];
-      return { ...previous, customRuleset, values };
+      const result = removeCustomFieldFromRuleset(previous.customRuleset, previous.values, fieldId);
+      return { ...previous, customRuleset: result.ruleset, values: result.values };
     });
   };
 
-  const addDerivedFormula = () => {
-    updateCustomRuleset((ruleset) => ({
-      ...ruleset,
-      derivedStats: [...(ruleset.derivedStats || []), { id: `derived${Date.now()}`, label: "New Derived Stat", formula: "0" }],
-    }));
-  };
+  const addDerivedFormula = () =>
+    updateCustomRuleset((ruleset) => addDerivedFormulaToRuleset(ruleset));
 
-  const updateDerivedFormula = (id, patch) => {
-    updateCustomRuleset((ruleset) => ({
-      ...ruleset,
-      derivedStats: ruleset.derivedStats.map((stat) => stat.id === id ? { ...stat, ...patch } : stat),
-    }));
-  };
+  const updateDerivedFormula = (id, patch) =>
+    updateCustomRuleset((ruleset) => updateDerivedFormulaInRuleset(ruleset, id, patch));
 
-  const removeDerivedFormula = (id) => {
-    updateCustomRuleset((ruleset) => ({ ...ruleset, derivedStats: ruleset.derivedStats.filter((stat) => stat.id !== id) }));
-  };
+  const removeDerivedFormula = (id) =>
+    updateCustomRuleset((ruleset) => removeDerivedFormulaFromRuleset(ruleset, id));
 
-  const addResource = () => {
-    updateCustomRuleset((ruleset) => ({
-      ...ruleset,
-      resources: [...(ruleset.resources || []), { id: `resource${Date.now()}`, label: "New Resource", defaultValue: 0 }],
-    }));
-  };
+  const addResource = () =>
+    updateCustomRuleset((ruleset) => addResourceToRuleset(ruleset));
 
-  const updateResourceDefinition = (id, patch) => {
-    updateCustomRuleset((ruleset) => ({
-      ...ruleset,
-      resources: ruleset.resources.map((resource) => resource.id === id ? { ...resource, ...patch } : resource),
-    }));
-  };
+  const updateResourceDefinition = (id, patch) =>
+    updateCustomRuleset((ruleset) => updateResourceInRuleset(ruleset, id, patch));
 
-  const removeResource = (id) => {
-    updateCustomRuleset((ruleset) => ({ ...ruleset, resources: ruleset.resources.filter((resource) => resource.id !== id) }));
-  };
+  const removeResource = (id) =>
+    updateCustomRuleset((ruleset) => removeResourceFromRuleset(ruleset, id));
 
   const resetForm = () => {
-    const defaultRuleset = rulesets.DND_5E || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET;
+    const defaultRuleset = rulesets.DND_5E_2014 || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET;
     setForm({
       ...createInitialForm(),
-      rulesetKey: defaultRuleset === rulesets.CUSTOM ? "CUSTOM" : "DND_5E",
+      rulesetKey: defaultRuleset === rulesets.CUSTOM ? "CUSTOM" : "DND_5E_2014",
       archetype: defaultRuleset.archetypes?.[4] || defaultRuleset.archetypes?.[0] || "",
-      hitDie: hitDieFor("DND_5E", defaultRuleset.archetypes?.[4]),
+      hitDie: hitDieFor("DND_5E_2014", defaultRuleset.archetypes?.[4]),
       values: valuesForRuleset(defaultRuleset),
       customRuleset: rulesets.CUSTOM || EMPTY_CUSTOM_RULESET,
     });
     setEditingId(null);
   };
 
-  const exportRuleset = () => {
-    const blob = new Blob([JSON.stringify(form.customRuleset, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = rulesetFileName(form.customRuleset.name);
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const importRuleset = (event) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const imported = JSON.parse(String(reader.result));
-        if (!imported.id || !imported.name || !Array.isArray(imported.sections)) throw new Error("Invalid ruleset schema");
-        setForm((previous) => ({
-          ...previous,
-          rulesetKey: "CUSTOM",
-          customRuleset: imported,
-          values: valuesForRuleset(imported),
-          resources: Object.fromEntries((imported.resources || []).map((resource) => [resource.id, resource.defaultValue ?? 0])),
-          autoCalculateHp: false,
-        }));
-        setFeedback({ type: "success", message: "Custom ruleset imported." });
-      } catch (error) {
-        console.error("Ruleset import failed:", error);
-        setFeedback({ type: "danger", message: "The selected file is not a valid ruleset JSON schema." });
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-  };
-
   const handleEdit = (character) => {
-    const key = Object.keys(rulesets).find((presetKey) => rulesets[presetKey].name === character.ruleset);
+    const key = Object.keys(rulesets).find((presetKey) => rulesets[presetKey].name === character.ruleset)
+      || (character.ruleset === "Dungeons & Dragons 5e" ? "DND_5E_2014" : null);
     const rulesetKey = key || "CUSTOM";
     const ruleset = rulesetKey === "CUSTOM"
       ? (character.attributes?.rulesetSchema || rulesets.CUSTOM || EMPTY_CUSTOM_RULESET)
@@ -448,9 +386,14 @@ export default function Character() {
       archetype: rulesetKey === "CUSTOM"
         ? (savedCustomArchetype ? "Custom" : savedArchetype || ruleset.archetypes?.[0] || "")
         : (savedArchetype || character.characterClass || ruleset.archetypes?.[0] || ""),
+      subclass: character.attributes?.subclass || "",
       customArchetype: savedCustomArchetype,
+      species: character.species || "",
+      background: character.background || "",
+      alignment: character.alignment || "",
+      notes: character.notes || "",
       level: character.level || 1,
-      hitDie: rulesetKey === "DND_5E"
+      hitDie: rulesetKey.startsWith("DND_5E")
         ? hitDieFor(rulesetKey, character.characterClass)
         : character.attributes?.hitDie || DEFAULT_HIT_DIE,
       values: valuesForRuleset(ruleset, savedValues),
@@ -502,11 +445,15 @@ export default function Character() {
     setIsSubmitting(true);
     setFeedback(null);
     const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
-    const effectiveCurrentHp = form.autoCalculateHp && calculatedHp !== null ? calculatedHp : form.currentHp;
+    const effectiveCurrentHp = form.autoCalculateHp && hasCalculatedHp ? calculatedHp : form.currentHp;
     const effectiveMaxHp = calculatedHp ?? form.maxHp;
     const payload = {
       name: form.name.trim(),
       characterClass: effectiveArchetype,
+      species: form.species,
+      background: form.background,
+      alignment: form.alignment,
+      notes: form.notes,
       level: Number(form.level) || 1,
       ruleset: activeRuleset.name,
       maxHp: Number(effectiveMaxHp) || 1,
@@ -540,14 +487,14 @@ export default function Character() {
       await fetchCharacters();
     } catch (error) {
       console.error("Save failed:", error);
-      setFeedback({ type: "danger", message: error.response?.data?.message || "Failed to save character sheet to account." });
+      setFeedback({ type: "danger", message: saveErrorMessage(error) });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   if (isLoadingRulesets) {
-    return <div className="container py-4">Loading character rulesets...</div>;
+    return <div className="container py-4 character-rulesets-loading" role="status">Loading character rulesets...</div>;
   }
 
   if (rulesetsError) {
@@ -558,7 +505,7 @@ export default function Character() {
     <div className="container py-4 character-page">
       <div className="d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h2 className="mb-1">Character Creation & Sheet Manager</h2>
+          <h2 className="mb-1">Character Creation & Monster Manager</h2>
           <p className="text-muted mb-0">Build characters from a ruleset schema, including custom tabletop games.</p>
         </div>
         {editingId && (
@@ -583,6 +530,7 @@ export default function Character() {
         </div>
       )}
 
+      <MonsterManager user={user} onFeedback={handleMonsterFeedback}>
       <div className="row g-4">
         <div className="col-lg-7">
           <div className="card shadow-sm">
@@ -605,6 +553,46 @@ export default function Character() {
                       required
                     />
                   </div>
+                  {form.rulesetKey.startsWith("DND_5E") && (
+                    <>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Species</label>
+                        <select className="form-select" value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {catalog.species.map((entry) => <option key={entry.key} value={entry.name}>{entry.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Background</label>
+                        <select className="form-select" value={form.background} onChange={(e) => setForm({ ...form, background: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {catalog.backgrounds.map((entry) => <option key={entry.key} value={entry.name}>{entry.name}</option>)}
+                        </select>
+                      </div>
+                      <div className="col-md-5">
+                        <label className="form-label fw-semibold">Alignment</label>
+                        <select className="form-select" value={form.alignment} onChange={(e) => setForm({ ...form, alignment: e.target.value })}>
+                          <option value="">— Select —</option>
+                          {[
+                            "Lawful Good",
+                            "Neutral Good",
+                            "Chaotic Good",
+                            "Lawful Neutral",
+                            "True Neutral",
+                            "Chaotic Neutral",
+                            "Lawful Evil",
+                            "Neutral Evil",
+                            "Chaotic Evil",
+                            "Unaligned",
+                          ].map((alignment) => <option key={alignment} value={alignment}>{alignment}</option>)}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                  <div className="col-12">
+                    <label className="form-label fw-semibold">Notes</label>
+                    <textarea className="form-control" rows="2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                  </div>
                   <div className="col-md-5">
                     <label className="form-label fw-semibold">
                       {activeRuleset.terminology.level || "Level"}
@@ -625,9 +613,9 @@ export default function Character() {
                   <div className="col-md-6">
                     <label className="form-label fw-semibold">System Ruleset</label>
                     <select className="form-select" value={form.rulesetKey} onChange={selectRuleset}>
-                      {Object.entries(rulesets).map(([key, ruleset]) => (
+                      {SYSTEM_RULESET_ORDER.filter((key) => rulesets[key]).map((key) => (
                         <option key={key} value={key}>
-                          {ruleset.name}
+                          {SYSTEM_RULESET_LABELS[key]}
                         </option>
                       ))}
                     </select>
@@ -638,12 +626,30 @@ export default function Character() {
                     </label>
                     <select className="form-select" value={form.archetype} onChange={selectArchetype}>
                       <option value="">— Select —</option>
-                      {(activeRuleset.archetypes || []).map((archetype) => (
+                      {(classEntries.length > 0
+                        ? classEntries.map((entry) => entry.name)
+                        : activeRuleset.archetypes || []).map((archetype) => (
                         <option key={archetype}>{archetype}</option>
                       ))}
                       {form.rulesetKey === "CUSTOM" && <option value="Custom">Custom</option>}
                     </select>
                   </div>
+                  {form.rulesetKey.startsWith("DND_5E") && (
+                    <div className="col-md-6">
+                      <label className="form-label fw-semibold">Subclass</label>
+                      <select
+                        className="form-select"
+                        value={form.subclass}
+                        onChange={(e) => setForm((previous) => ({ ...previous, subclass: e.target.value }))}
+                        disabled={!form.archetype || subclassEntries.length === 0}
+                      >
+                        <option value="">— Select —</option>
+                        {subclassEntries.map((entry) => (
+                          <option key={entry.key} value={entry.name}>{entry.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                   {form.archetype === "Custom" && (
                     <div className="col-md-6">
                       <label className="form-label">
@@ -656,7 +662,7 @@ export default function Character() {
                       />
                     </div>
                   )}
-                  {form.rulesetKey === "DND_5E" && (
+                  {form.rulesetKey.startsWith("DND_5E") && (
                     <div className="col-md-3">
                       <label className="form-label">Hit Die</label>
                       <input
@@ -669,24 +675,11 @@ export default function Character() {
                   )}
                 </div>
 
-                {activeRuleset.sections.map((section) => (
-                  <section key={section.id} className="mb-4">
-                    <h6 className="text-uppercase text-secondary fw-bold mb-3">
-                      {section.title}
-                    </h6>
-                    <div className="row g-2">
-                      {section.fields.map((field) => (
-                        <AttributeInput
-                          key={field.id}
-                          field={field}
-                          value={form.values[field.id]}
-                          values={form.values}
-                          onChange={updateValue}
-                        />
-                      ))}
-                    </div>
-                  </section>
-                ))}
+                <RulesetAttributeSections
+                  ruleset={activeRuleset}
+                  values={form.values}
+                  onChange={updateValue}
+                />
 
                 {activeRuleset.derivedStats?.length > 0 && (
                   <section className="mb-4">
@@ -705,27 +698,14 @@ export default function Character() {
                   </section>
                 )}
 
-                {activeRuleset.resources?.length > 0 && (
-                  <section className="mb-4">
-                    <h6 className="text-uppercase text-secondary fw-bold mb-3">Resources</h6>
-                    <div className="row g-2">
-                      {activeRuleset.resources.map((resource) => (
-                        <div className="col-6 col-md-4" key={resource.id}>
-                          <label className="form-label">{resource.label}</label>
-                          <input
-                            type="number"
-                            className="form-control"
-                            value={form.resources[resource.id] ?? resource.defaultValue ?? 0}
-                            onChange={(e) => updateResource(resource.id, Number(e.target.value))}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </section>
-                )}
+                <RulesetResources
+                  resources={activeRuleset.resources}
+                  values={form.resources}
+                  onChange={updateResource}
+                />
 
                 {(hpStat || form.rulesetKey === "CUSTOM") && (
-                  <div className="row g-3 align-items-center mb-4 p-3 border rounded">
+                  <div className="row g-3 align-items-center mb-4">
                     <div className="col-md-5">
                       <label className="form-label fw-bold text-success mb-1">
                         {hpStat?.label || "Maximum HP"}
@@ -745,7 +725,7 @@ export default function Character() {
                         type="number"
                         min="0"
                         className="form-control"
-                        value={form.autoCalculateHp && calculatedHp !== null ? calculatedHp : form.currentHp}
+                        value={form.autoCalculateHp && hasCalculatedHp ? calculatedHp : form.currentHp}
                         onChange={(e) => setForm({ ...form, currentHp: Number(e.target.value) })}
                       />
                     </div>
@@ -760,7 +740,7 @@ export default function Character() {
                             setForm({
                               ...form,
                               autoCalculateHp,
-                              ...(autoCalculateHp && calculatedHp !== null
+                              ...(autoCalculateHp && hasCalculatedHp
                                 ? { currentHp: calculatedHp }
                                 : {}),
                             });
@@ -776,7 +756,7 @@ export default function Character() {
                 )}
 
                 {form.rulesetKey === "CUSTOM" && (
-                  <CustomBuilder
+                  <CustomRulesetBuilder
                     ruleset={form.customRuleset}
                     onRulesetChange={updateCustomRulesetMetadata}
                     onFieldAdd={addCustomField}
@@ -788,17 +768,8 @@ export default function Character() {
                     onResourceAdd={addResource}
                     onResourceChange={updateResourceDefinition}
                     onResourceRemove={removeResource}
-                    onImport={() => importRef.current?.click()}
-                    onExport={exportRuleset}
                   />
                 )}
-                <input
-                  ref={importRef}
-                  type="file"
-                  accept="application/json,.json"
-                  className="d-none"
-                  onChange={importRuleset}
-                />
                 <div className="d-grid">
                   <button
                     type="button"
@@ -939,191 +910,16 @@ export default function Character() {
           </div>
         </div>
       </div>
+      <div className="row g-4">
+        <div className="col-lg-7">
+          <MonsterEditor user={user} />
+        </div>
+        <div className="col-lg-5">
+          <MonsterOverview user={user} />
+        </div>
+      </div>
+      </MonsterManager>
     </div>
   );
 }
 
-function CustomBuilder({
-  ruleset,
-  onRulesetChange,
-  onFieldAdd,
-  onFieldChange,
-  onFieldRemove,
-  onFormulaAdd,
-  onFormulaChange,
-  onFormulaRemove,
-  onResourceAdd,
-  onResourceChange,
-  onResourceRemove,
-  onImport,
-  onExport,
-}) {
-  const fields = ruleset.sections.flatMap((section) => section.fields);
-  return (
-    <section className="border rounded p-3 mb-4">
-      <div className="d-flex justify-content-between align-items-center">
-        <h6 className="text-uppercase text-secondary fw-bold mb-0">
-          Custom Ruleset Builder
-        </h6>
-        <div className="btn-group btn-group-sm">
-          <button type="button" className="btn btn-outline-secondary" onClick={onImport}>
-            Import JSON
-          </button>
-          <button type="button" className="btn btn-outline-secondary" onClick={onExport}>
-            Export JSON
-          </button>
-        </div>
-      </div>
-
-      <div className="row g-2 mt-2">
-        <div className="col-md-6">
-          <label className="form-label">Ruleset Name</label>
-          <input
-            className="form-control form-control-sm"
-            value={ruleset.name}
-            onChange={(event) => onRulesetChange({ name: event.target.value })}
-          />
-        </div>
-      </div>
-
-      <hr />
-
-      <div className="d-flex justify-content-between align-items-center">
-        <strong>Attributes</strong>
-        <button type="button" className="btn btn-outline-primary btn-sm" onClick={onFieldAdd}>
-          + Add Attribute
-        </button>
-      </div>
-
-      {fields.map((field) => (
-        <div className="row g-2 mt-1 align-items-end" key={field.id}>
-          <div className="col-7">
-            <label className="small">Label</label>
-            <input
-              className="form-control form-control-sm"
-              value={field.label}
-              onChange={(event) => onFieldChange(field.id, { label: event.target.value })}
-            />
-          </div>
-          <div className="col-3">
-            <label className="small">Model</label>
-            <select
-              className="form-select form-select-sm"
-              value={field.model || "raw"}
-              onChange={(event) => onFieldChange(field.id, { model: event.target.value })}
-            >
-              <option value="raw">Raw</option>
-              <option value="score">Score + Mod</option>
-              <option value="percentile">Percentile</option>
-              <option value="pool">Pool</option>
-            </select>
-          </div>
-          <div className="col-2">
-            <button
-              type="button"
-              className="btn btn-outline-danger btn-sm w-100"
-              onClick={() => onFieldRemove(field.id)}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
-
-      <div className="alert alert-light border small mt-3 mb-0">
-        <strong>Attributes and formula variables:</strong> use the attribute labels in formulas. Duplicate
-        labels are numbered in order, such as <code>Strength (2)</code>. For example, if <code>Strength</code>{" "}
-        is 14, then <code>floor((Strength - 10) / 2)</code> evaluates to <strong>+2</strong>. Built-in
-        variables include <code>level</code> and <code>hitDie</code>.
-      </div>
-      <hr />
-
-      <div className="d-flex justify-content-between align-items-center">
-        <strong>Derived formulas</strong>
-        <button type="button" className="btn btn-outline-primary btn-sm" onClick={onFormulaAdd}>
-          + Add Formula
-        </button>
-      </div>
-
-      {(ruleset.derivedStats || []).map((stat) => (
-        <div className="row g-2 mt-1" key={stat.id}>
-          <div className="col-4">
-            <input
-              className="form-control form-control-sm"
-              value={stat.label}
-              onChange={(event) => onFormulaChange(stat.id, { label: event.target.value })}
-            />
-          </div>
-          <div className="col-6">
-            <input
-              className="form-control form-control-sm font-monospace"
-              value={formulaForDisplay(stat.formula, ruleset)}
-              onChange={(event) => onFormulaChange(stat.id, { formula: formulaForStorage(event.target.value, ruleset) })}
-              placeholder="floor((Constitution + Size) / 10)"
-            />
-          </div>
-          <div className="col-2">
-            <button
-              type="button"
-              className="btn btn-outline-danger btn-sm w-100"
-              onClick={() => onFormulaRemove(stat.id)}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
-      <div className="alert alert-light border small mt-3 mb-0">
-        <strong>Derived formulas:</strong> use them to calculate values from attributes and built-in
-        variables. For example, a derived stat named <em>Hit Points</em> with formula{" "}
-        <code>level * hitDie + floor((Constitution - 10) / 2)</code> updates when those inputs
-        change. Supported functions include <code>floor</code>, <code>ceil</code>, <code>round</code>,{" "}
-        <code>min</code>, <code>max</code>, and <code>abs</code>.
-      </div>
-      <hr />
-
-      <div className="d-flex justify-content-between align-items-center">
-        <strong>Primary resources</strong>
-        <button type="button" className="btn btn-outline-primary btn-sm" onClick={onResourceAdd}>
-          + Add Resource
-        </button>
-      </div>
-
-      {(ruleset.resources || []).map((resource) => (
-        <div className="row g-2 mt-1" key={resource.id}>
-          <div className="col-5">
-            <input
-              className="form-control form-control-sm"
-              value={resource.label}
-              onChange={(event) => onResourceChange(resource.id, { label: event.target.value })}
-            />
-          </div>
-          <div className="col-5">
-            <input
-              type="number"
-              className="form-control form-control-sm"
-              value={resource.defaultValue ?? 0}
-              onChange={(event) =>
-                onResourceChange(resource.id, { defaultValue: Number(event.target.value) })
-              }
-            />
-          </div>
-          <div className="col-2">
-            <button
-              type="button"
-              className="btn btn-outline-danger btn-sm w-100"
-              onClick={() => onResourceRemove(resource.id)}
-            >
-              Remove
-            </button>
-          </div>
-        </div>
-      ))}
-      <div className="alert alert-light border small mt-3 mb-0">
-        <strong>Primary resources:</strong> use these for trackable pools such as Mana, Sanity, Luck,
-        Rage, or Stress. Set the default value to the amount a new character starts with; the character
-        sheet can then track the current amount.
-      </div>
-    </section>
-  );
-}

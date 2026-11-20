@@ -3,6 +3,10 @@ import { api } from "./Api";
 export interface CharacterPayload {
   name: string;
   characterClass: string;
+  species?: string;
+  background?: string;
+  alignment?: string;
+  notes?: string;
   level: number;
   ruleset: string;
   maxHp: number;
@@ -33,9 +37,23 @@ export interface CharacterCalculationResponse {
   calculatedMaxHp: number | null;
 }
 
+export interface CharacterCatalog {
+  classes2014: Array<Record<string, any>>;
+  subclasses2014: Array<Record<string, any>>;
+  classes2024: Array<Record<string, any>>;
+  subclasses2024: Array<Record<string, any>>;
+  species: Array<Record<string, any>>;
+  backgrounds: Array<Record<string, any>>;
+}
+
 export const CharacterService = {
   getRulesets: async (): Promise<RulesetDefinition[]> => {
     const response = await api.get("/v1/rulesets");
+    return response.data;
+  },
+
+  getCatalog: async (): Promise<CharacterCatalog> => {
+    const response = await api.get("/v1/rulesets/catalog");
     return response.data;
   },
 

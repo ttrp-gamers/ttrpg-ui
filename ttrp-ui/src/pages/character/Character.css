@@ -3,6 +3,11 @@
   font-family: Georgia, "Times New Roman", serif;
 }
 
+.character-rulesets-loading {
+  color: #fff7e7;
+  text-shadow: 0 1px 2px #1a0d08;
+}
+
 .character-page > .d-flex:first-child {
   border-bottom: 1px solid rgba(246, 198, 107, 0.45);
   padding-bottom: 1rem;
@@ -122,6 +127,26 @@
 }
 
 .character-page .form-control::placeholder {
+  color: var(--muted);
+}
+
+.character-page .monster-search-pagination .page-link {
+  border-color: var(--wood-highlight);
+  background: #29180f;
+  color: var(--gold-light);
+  box-shadow: none;
+}
+
+.character-page .monster-search-pagination .page-item.active .page-link {
+  border-color: var(--gold);
+  background: var(--gold);
+  color: var(--wood-dark);
+  font-weight: bold;
+}
+
+.character-page .monster-search-pagination .page-item.disabled .page-link {
+  border-color: rgba(152, 100, 59, 0.45);
+  background: rgba(41, 24, 15, 0.65);
   color: var(--muted);
 }
 
