@@ -23,12 +23,11 @@ import { exportCharacterPdf } from "./pdfExport";
 
 const DEFAULT_HIT_DIE = 8;
 const SYSTEM_RULESET_LABELS = {
-  DND_5E: "Dungeons & Dragons 5e",
-  CALL_OF_CTHULHU_7E: "Call of Cthulhu 7e",
-  PATHFINDER_2E: "Pathfinder 2e",
+  DND_5E_2014: "Dungeons & Dragons 5e (2014)",
+  DND_5E_2024: "Dungeons & Dragons 5e (2024)",
   CUSTOM: "Homebrew / Custom",
 };
-const SYSTEM_RULESET_ORDER = ["DND_5E", "CALL_OF_CTHULHU_7E", "PATHFINDER_2E", "CUSTOM"];
+const SYSTEM_RULESET_ORDER = ["DND_5E_2014", "DND_5E_2024", "CUSTOM"];
 const EMPTY_CUSTOM_RULESET = {
   id: "custom",
   name: "Homebrew/Custom",
