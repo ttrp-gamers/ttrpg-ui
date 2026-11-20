@@ -138,6 +138,7 @@ function hpForCharacter(character, rulesets) {
 
 function exportDataForForm(form, activeRuleset, derivedStats) {
   const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
+  const hasCalculatedHp = derivedStats?.hitPoints !== null && derivedStats?.hitPoints !== undefined;
   return {
     name: form.name || "character-sheet",
     characterClass: effectiveArchetype,
@@ -147,8 +148,8 @@ function exportDataForForm(form, activeRuleset, derivedStats) {
     notes: form.notes,
     level: Number(form.level) || 1,
     ruleset: activeRuleset.name,
-    maxHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.maxHp,
-    currentHp: form.autoCalculateHp && derivedStats.hitPoints !== null ? derivedStats.hitPoints : form.currentHp,
+    maxHp: hasCalculatedHp ? derivedStats.hitPoints : form.maxHp,
+    currentHp: form.autoCalculateHp && hasCalculatedHp ? derivedStats.hitPoints : form.currentHp,
     attributes: {
       rulesetKey: form.rulesetKey,
       rulesetSchema: form.rulesetKey === "CUSTOM" ? form.customRuleset : undefined,
@@ -184,6 +185,7 @@ export default function Character() {
 
   const activeRuleset = form.rulesetKey === "CUSTOM" ? form.customRuleset : rulesets[form.rulesetKey];
   const calculatedHp = derivedStats.hitPoints;
+  const hasCalculatedHp = calculatedHp !== null && calculatedHp !== undefined;
   const hpStat = activeRuleset?.derivedStats?.find((stat) => stat.id === "hitPoints");
   const catalogVersion = form.rulesetKey === "DND_5E_2024" ? "2024" : "2014";
   const classEntries = catalog[`classes${catalogVersion}`] || [];
@@ -443,7 +445,7 @@ export default function Character() {
     setIsSubmitting(true);
     setFeedback(null);
     const effectiveArchetype = form.archetype === "Custom" ? form.customArchetype || "Custom" : form.archetype;
-    const effectiveCurrentHp = form.autoCalculateHp && calculatedHp !== null ? calculatedHp : form.currentHp;
+    const effectiveCurrentHp = form.autoCalculateHp && hasCalculatedHp ? calculatedHp : form.currentHp;
     const effectiveMaxHp = calculatedHp ?? form.maxHp;
     const payload = {
       name: form.name.trim(),
@@ -723,7 +725,7 @@ export default function Character() {
                         type="number"
                         min="0"
                         className="form-control"
-                        value={form.autoCalculateHp && calculatedHp !== null ? calculatedHp : form.currentHp}
+                        value={form.autoCalculateHp && hasCalculatedHp ? calculatedHp : form.currentHp}
                         onChange={(e) => setForm({ ...form, currentHp: Number(e.target.value) })}
                       />
                     </div>
@@ -738,7 +740,7 @@ export default function Character() {
                             setForm({
                               ...form,
                               autoCalculateHp,
-                              ...(autoCalculateHp && calculatedHp !== null
+                              ...(autoCalculateHp && hasCalculatedHp
                                 ? { currentHp: calculatedHp }
                                 : {}),
                             });
